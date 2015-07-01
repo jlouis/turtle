@@ -3,7 +3,7 @@ language: erlang
 otp_release:
     - 17.4
 
-script: "make compile; make test"
+script: "make update compile test"
 
 notifications:
     slack:
