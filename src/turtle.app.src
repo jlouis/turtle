@@ -5,7 +5,9 @@
   {mod, {'turtle_app', []}},
   {applications,
    [kernel,
-    stdlib
+    stdlib,
+    lager,
+    amqp_client
    ]},
   {env,[]},
   {modules, []}
