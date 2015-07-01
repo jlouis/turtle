@@ -1,8 +1,5 @@
 REBAR=./rebar3
-
-.PHONY: update
-update:
-	$(REBAR) update
+.DEFAULT_GOAL := compile
 
 .PHONY: compile
 compile:
@@ -16,4 +13,7 @@ dialyzer:
 test:
 	$(REBAR) ct
 
+.PHONY: update
+update:
+	$(REBAR) update
 

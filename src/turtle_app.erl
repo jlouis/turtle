@@ -2,7 +2,7 @@
 %% @doc turtle public API
 %% @end
 %%%-------------------------------------------------------------------
-
+%% @private
 -module('turtle_app').
 
 -behaviour(application).
