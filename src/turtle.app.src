@@ -1,5 +1,5 @@
 {application, 'turtle',
- [{description, "An OTP application"},
+ [{description, "Turtle manages RabbitMQ connections"},
   {vsn, "0.1.0"},
   {registered, []},
   {mod, {'turtle_app', []}},
