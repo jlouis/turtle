@@ -1,0 +1,12 @@
+language: erlang
+
+otp_release:
+    - 17.4
+
+script: "make compile; make test"
+
+notifications:
+    slack:
+        rooms:
+            - shopgun:UC86BQbSolaCbi1dMJbqZK8j#travis
+            - shopgun:UC86BQbSolaCbi1dMJbqZK8j#erlang
