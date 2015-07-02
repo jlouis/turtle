@@ -15,7 +15,7 @@ end_per_group(_Group, _Config) ->
 init_per_suite(Config) ->
     Config.
 
-end_per_suite(Config) ->
+end_per_suite(_Config) ->
     ok.
 
 init_per_testcase(_Case, Config) ->
