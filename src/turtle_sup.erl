@@ -50,7 +50,7 @@ conn_params(Ps) ->
         username = maps:get(username, Ps, <<"guest">>),
         password = maps:get(password, Ps, <<"guest">>),
         virtual_host = maps:get(virtual_host, Ps, <<"/">>),
-        host = maps:get(host, Ps, <<"localhost">>),
+        host = maps:get(host, Ps, "localhost"),
         port = maps:get(port, Ps, 5672),
         
         channel_max = maps:get(channel_max, Ps, 0),

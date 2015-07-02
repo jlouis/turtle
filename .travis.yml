@@ -1,5 +1,8 @@
 language: erlang
 
+services:
+  - rabbitmq
+
 otp_release:
     - 17.4
 

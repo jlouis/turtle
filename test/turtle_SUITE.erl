@@ -15,7 +15,7 @@ end_per_group(_Group, _Config) ->
 init_per_suite(Config) ->
     Config.
 
-end_per_suite(_Config) ->
+end_per_suite(Config) ->
     ok.
 
 init_per_testcase(_Case, Config) ->
@@ -41,4 +41,8 @@ all() ->
 %% ------------------------------------------
 start_stop(_Config) ->
     {ok, _Apps} = application:ensure_all_started(turtle),
+    ct:sleep(200),
     ok = application:stop(turtle).
+
+%% INTERNAL FUNCTIONS
+%% ------------------------------------------
