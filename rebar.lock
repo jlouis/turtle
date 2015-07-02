@@ -7,4 +7,8 @@
  {<<"lager">>,
   {git,"https://github.com/shopguncom/lager",
        {ref,"d33ccf3b69de09a628fe38b4d7981bb8671b8a4f"}},
+  0},
+ {<<"gproc">>,
+  {git,"https://github.com/uwiger/gproc",
+       {ref,"2b1b9ac870416469097af695de413afd5e78f66c"}},
   0}].

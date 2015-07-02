@@ -7,8 +7,12 @@
    [kernel,
     stdlib,
     lager,
-    amqp_client
+    amqp_client,
+    gproc
    ]},
-  {env,[]},
+  {env,[
+      {gproc_env_order, [app_env]},
+      {connection_config, [#{ conn_name => local_test }]}
+  ]},
   {modules, []}
  ]}.
