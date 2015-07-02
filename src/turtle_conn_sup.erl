@@ -7,7 +7,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1]).
+-export([start_link/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -18,21 +18,21 @@
 %% API functions
 %%====================================================================
 
-start_link(Configuration) ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, [Configuration]).
+start_link(Name, Configuration) ->
+    supervisor:start_link({local, ?SERVER}, ?MODULE, [Name, Configuration]).
 
 %%====================================================================
 %% Supervisor callbacks
 %%====================================================================
 
 %% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
-init([Configuration]) ->
+init([Name, Configuration]) ->
     ChannelSup =
         {channel_sup,
           {turtle_chan_sup, start_link, []},
           transient, infinity, supervisor, [turtle_chan_sup]},
     Conn = {connection,
-        {turtle_conn, start_link, [Configuration]},
+        {turtle_conn, start_link, [Name, Configuration]},
         permanent, 5000, worker, [turtle_conn]},
     {ok, { {one_for_all, 30, 3600}, [ChannelSup, Conn]} }.
 

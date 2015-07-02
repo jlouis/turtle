@@ -42,8 +42,8 @@ configure_connectors() ->
 
 conn_sup(#{ conn_name := Name } = Ps) ->
     {Name,
-        {turtle_conn_sup, start_link, [conn_params(Ps)]},
-        transient, infinity, supervisor, [turtle_conn_sup]}.
+        {turtle_conn_sup, start_link, [Name, conn_params(Ps)]},
+        permanent, infinity, supervisor, [turtle_conn_sup]}.
 
 conn_params(Ps) ->
     #amqp_params_network {
