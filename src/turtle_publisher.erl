@@ -33,7 +33,7 @@
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
 start_link(Name, Connection, Declarations) ->
-    gen_server:start_link({local, Name}, ?MODULE, [Connection, Declarations], []).
+    gen_server:start_link({via, gproc, {n,l,{turtle,publisher, Name}}}, ?MODULE, [Connection, Declarations], []).
 
 publish(Publisher, Exch, Key, ContentType, Payload) ->
     Pub = #'basic.publish' {
@@ -41,16 +41,18 @@ publish(Publisher, Exch, Key, ContentType, Payload) ->
         routing_key = Key
     },
     Props = #'P_basic' { content_type = ContentType },
-    gen_server:cast(Publisher, {publish, Pub, Props, Payload}).
+    Pid = gproc:where({n,l,{turtle,publisher,Publisher}}),
+    gen_server:cast(Pid, {publish, Pub, Props, Payload}).
 
 %% CALLBACKS
 %% -------------------------------------------------------------------
 
 %% @private
-init([Connection, Declarations]) ->
-    {ok, Channel} = turtle:open_channel(Connection),
+init([ConnName, Declarations]) ->
+    ConnPid = gproc:where({n,l,{turtle, connection, ConnName}}),
+    {ok, Channel} = turtle:open_channel(ConnName),
     ok = turtle:declare(Channel, Declarations),
-    MRef = erlang:monitor(process, Connection),
+    MRef = erlang:monitor(process, ConnPid),
     {ok, #state { channel = Channel, conn_ref = MRef }}.
 
 %% @private

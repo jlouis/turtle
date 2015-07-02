@@ -85,7 +85,7 @@ send_recv(_Config) ->
     {ok, Pid} = turtle_subscriber:start_link(Ch, F),
     {ok, _Tag} = turtle:consume(Ch, Q, Pid),
     
-    ct:log("Publish a message on the channel"),
+    ct:log("Start a new publisher process"),
     {ok, _Pid} = turtle_publisher:start_link(local_publisher, local_test, [
         #'exchange.declare' { exchange = X },
         #'queue.declare' { queue = Q },
@@ -95,6 +95,7 @@ send_recv(_Config) ->
             routing_key = Q
         }]),
         
+    ct:log("Publish a message on the channel"),
     turtle:publish(local_publisher, X, Q, <<"text/plain">>, <<"The turtle and the hare">>),
     receive
         {Q, <<"text/plain">>, <<"The turtle and the hare">>} ->
@@ -119,9 +120,11 @@ kill_connection(_Config) ->
     
     ct:log("Kill the connection, check that the publisher goes away"),
     process_flag(trap_exit, true),
-    exit(whereis(local_test), dieinafire),
+    ConnPid = gproc:where({n,l,{turtle,connection,local_test}}),
+    PublisherPid = gproc:where({n,l,{turtle,publisher,local_publisher}}),
+    exit(ConnPid, dieinafire),
     receive
-        {'EXIT', _Pid, Reason} ->
+        {'EXIT', PublisherPid, Reason} ->
             ct:log("Publisher exit: ~p", [Reason]),
             ok;
         Msg ->

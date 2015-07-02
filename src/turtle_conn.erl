@@ -32,12 +32,14 @@
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
 start_link(Name, Configuration) ->
-    gen_server:start_link({local, Name}, ?MODULE, [Name, Configuration], []).
+    gen_server:start_link({via, gproc, {n,l, {turtle, connection, Name}}}, ?MODULE, [Name, Configuration], []).
 	
 open_channel(Name) ->
     call(Name, open_channel).
     
-call(Loc, Msg) -> gen_server:call(Loc, Msg, 20*1000).
+call(Loc, Msg) ->
+    Pid = gproc:where({n,l,{turtle, connection, Loc}}),
+    gen_server:call(Pid, Msg, 20*1000).
 
 %% CALLBACKS
 %% -------------------------------------------------------------------
