@@ -128,7 +128,7 @@ kill_connection(_Config) ->
     receive
         {'EXIT', PublisherPid, Reason} ->
             ct:log("Publisher exit: ~p", [Reason]),
-            ct:fail(argh);
+            ok;
         Msg ->
             ct:fail({unexpected_msg, Msg})
     after 40 ->
