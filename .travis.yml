@@ -6,7 +6,7 @@ services:
 otp_release:
     - 17.4
 
-script: "make update compile test"
+script: "make update compile travis-test"
 
 notifications:
     slack:
