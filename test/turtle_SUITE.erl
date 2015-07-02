@@ -37,7 +37,7 @@ lifetime_group() ->
     ]}].
 
 basic_group() ->
-   [{basic, [], [
+   [{basic, [shuffle], [
        send_recv,
        kill_connection
    ]}].
@@ -107,6 +107,7 @@ kill_connection(_Config) ->
     X = <<"send_recv_exchange">>,
     Q = <<"send_recv_queue">>,
 
+    ct:log("Start the publisher on the connection"),
     {ok, _Pid} = turtle_publisher:start_link(local_publisher, local_test, [
         #'exchange.declare' { exchange = X },
         #'queue.declare' { queue = Q },
@@ -116,6 +117,7 @@ kill_connection(_Config) ->
             routing_key = Q
         }]),
     
+    ct:log("Kill the connection, check that the publisher goes away"),
     process_flag(trap_exit, true),
     exit(whereis(local_test), dieinafire),
     receive
