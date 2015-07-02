@@ -24,6 +24,7 @@
 -define(DEFAULT_RETRY_TIME, 15*1000).
 
 -record(state, {
+	name :: atom(),
 	network_params :: #amqp_params_network{},
 	connection = undefined :: undefined | pid(),
 	retry_time = ?DEFAULT_RETRY_TIME :: pos_integer()
@@ -32,7 +33,7 @@
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
 start_link(Name, Configuration) ->
-    gen_server:start_link({via, gproc, {n,l, {turtle, connection, Name}}}, ?MODULE, [Name, Configuration], []).
+    gen_server:start_link(?MODULE, [Name, Configuration], []).
 	
 open_channel(Name) ->
     call(Name, open_channel).
@@ -45,9 +46,10 @@ call(Loc, Msg) ->
 %% -------------------------------------------------------------------
 
 %% @private
-init([_Name, Configuration]) ->
+init([Name, Configuration]) ->
     self() ! connect,
     {ok, #state {
+         name = Name,
     	network_params = Configuration
     }}.
 
@@ -67,9 +69,11 @@ handle_cast(Cast, State) ->
     {noreply, State}.
 
 %% @private
-handle_info(connect, #state { network_params = NP, retry_time = Retry } = State) ->
+handle_info(connect, #state { name = Name, network_params = NP, retry_time = Retry } = State) ->
     case connect(State) of
-        {ok, ConnectedState} -> {noreply, ConnectedState};
+        {ok, ConnectedState} ->
+            reg(Name),
+            {noreply, ConnectedState};
         {error, unknown_host} ->
             lager:error("Unknown host while connecting to RabbitMQ: ~p", [NP]),
             {stop, {error, unknown_host}, State};
@@ -97,3 +101,7 @@ connect(#state { network_params = NP } = State) ->
        {ok, Conn} -> {ok, State#state { connection = Conn }};
        {error, Reason} -> {error, Reason}
     end.
+
+reg(Name) ->
+    true = gproc:reg({n,l, {turtle, connection, Name}}).
+

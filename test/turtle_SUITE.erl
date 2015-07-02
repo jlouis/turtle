@@ -94,7 +94,8 @@ send_recv(_Config) ->
             exchange = X,
             routing_key = Q
         }]),
-        
+    gproc:await({n,l,{turtle,publisher,local_publisher}}, 30),
+
     ct:log("Publish a message on the channel"),
     turtle:publish(local_publisher, X, Q, <<"text/plain">>, <<"The turtle and the hare">>),
     receive
@@ -117,6 +118,7 @@ kill_connection(_Config) ->
             exchange = X,
             routing_key = Q
         }]),
+    gproc:await({n,l,{turtle,publisher,local_publisher}}, 30),
     
     ct:log("Kill the connection, check that the publisher goes away"),
     process_flag(trap_exit, true),

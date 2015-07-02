@@ -33,7 +33,7 @@
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
 start_link(Name, Connection, Declarations) ->
-    gen_server:start_link({via, gproc, {n,l,{turtle,publisher, Name}}}, ?MODULE, [Connection, Declarations], []).
+    gen_server:start_link(?MODULE, [Name, Connection, Declarations], []).
 
 publish(Publisher, Exch, Key, ContentType, Payload) ->
     Pub = #'basic.publish' {
@@ -48,12 +48,12 @@ publish(Publisher, Exch, Key, ContentType, Payload) ->
 %% -------------------------------------------------------------------
 
 %% @private
-init([ConnName, Declarations]) ->
-    ConnPid = gproc:where({n,l,{turtle, connection, ConnName}}),
-    {ok, Channel} = turtle:open_channel(ConnName),
-    ok = turtle:declare(Channel, Declarations),
-    MRef = erlang:monitor(process, ConnPid),
-    {ok, #state { channel = Channel, conn_ref = MRef }}.
+init([Name, ConnName, Declarations]) ->
+    %% Initialize the system in the {initializing,...} state and await the presence of
+    %% a connection under the given name without blocking the process. We replace
+    %% the state with a #state{} record once that happens (see handle_info/2)
+    Ref = gproc:nb_wait({n,l,{turtle,connection,ConnName}}),
+    {ok, {initializing, Name, Ref, ConnName, Declarations}}.
 
 %% @private
 handle_call(Call, From, State) ->
@@ -61,6 +61,11 @@ handle_call(Call, From, State) ->
     {reply, {error, unknown_call}, State}.
 
 %% @private
+handle_cast(Pub, {initializing, _, _, _, _} = Init) ->
+    %% Messages cast to an initializing publisher are thrown away, but it shouldn't
+    %% happen, so we log them
+    lager:warning("Publish while initializing: ~p", [Pub]),
+    {noreply, Init};
 handle_cast({publish, Pub, Props, Payload}, #state { channel = Ch } = State) ->
     ok = amqp_channel:cast(Ch, Pub, #amqp_msg { props = Props, payload = Payload }),
     {noreply, State};
@@ -69,6 +74,12 @@ handle_cast(Cast, State) ->
     {noreply, State}.
 
 %% @private
+handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, N, Ref, CName, Decls}) ->
+    {ok, Channel} = turtle:open_channel(CName),
+    ok = turtle:declare(Channel, Decls),
+    MRef = erlang:monitor(process, Pid),
+    reg(N),
+    {noreply, #state { channel = Channel, conn_ref = MRef}};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
     {stop, {error, {connection_down, Reason}}, State};
 handle_info(Info, State) ->
@@ -86,3 +97,5 @@ code_change(_, State, _) ->
 %%
 %% INTERNAL FUNCTIONS
 %%
+reg(Name) ->
+    true = gproc:reg({n,l,{turtle,publisher, Name}}).
