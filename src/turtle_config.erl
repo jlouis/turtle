@@ -3,4 +3,6 @@
 
 -export([read_params/0]).
 
-read_params() -> [#{ conn_name => local_test }].
+read_params() ->
+    {ok, EnvOrder} = application:get_env(turtle, gproc_env_order),
+    gproc:get_env(l,turtle,connection_config, EnvOrder).

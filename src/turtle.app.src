@@ -11,7 +11,7 @@
     gproc
    ]},
   {env,[
-      {gproc_env_order, [app_env]},
+      {gproc_env_order, [app_env, error]},
       {connection_config, [#{ conn_name => local_test }]}
   ]},
   {modules, []}
