@@ -5,7 +5,8 @@
 -export([
 	declare/2,
 	open_channel/1,
-	publish/4
+	publish/5,
+	consume/3
 ]).
 
 -type channel() :: pid().
@@ -43,9 +44,16 @@ declare(Channel, [#'queue.bind' {} = Queue | Ds]) ->
 %% @doc publish(Chan, Exch, Key, Payload) publishes messages on a channel
 %% Low-level helper. Publish a `Payload' on the exchange `Exch' with routing key `Key'
 %% @end
-publish(Chan, X, Key, Payload) ->
+publish(Chan, X, Key, ContentType, Payload) ->
     Publish = #'basic.publish' {
         exchange = X,
         routing_key = Key
     },
-    amqp_channel:cast(Chan, Publish, #amqp_msg { payload = Payload }).
+    Props = #'P_basic' { content_type = ContentType },
+    amqp_channel:cast(Chan, Publish, #amqp_msg { props = Props, payload = Payload }).
+
+consume(Channel, Queue, ConsumerPid) ->
+   Sub = #'basic.consume' { queue = Queue },
+   #'basic.consume_ok' { consumer_tag = Tag } =
+       amqp_channel:subscribe(Channel, Sub, ConsumerPid),
+   {ok, Tag}.

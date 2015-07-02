@@ -11,7 +11,7 @@ dialyzer:
 
 .PHONY: test	
 test:
-	$(REBAR) ct
+	$(REBAR) ct | sed -e 's|_build/test/lib/turtle/||'
 
 .PHONY: update
 update:

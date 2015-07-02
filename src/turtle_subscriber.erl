@@ -4,7 +4,7 @@
 
 %% Lifetime
 -export([
-	start_link/1
+	start_link/2
 ]).
 
 %% API
@@ -27,14 +27,14 @@
 
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
-start_link(Fun) ->
-    gen_server:start_link(?MODULE, [Fun], []).
+start_link(Channel, Fun) ->
+    gen_server:start_link(?MODULE, [Channel, Fun], []).
 	
 %% CALLBACKS
 %% -------------------------------------------------------------------
 
 %% @private
-init([Fun, Channel]) ->
+init([Channel, Fun]) ->
     {ok, #state { invoke = Fun, channel = Channel }}.
 
 %% @private
