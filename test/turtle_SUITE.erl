@@ -74,7 +74,7 @@ send_recv(_Config) ->
             exchange = X,
             routing_key = Q
         }]),
-        
+
     ct:log("Add a subscriber to the newly declared queue"),
     Self = self(),
     F = fun(Key, ContentType, Payload) ->
@@ -85,8 +85,17 @@ send_recv(_Config) ->
     {ok, _Tag} = turtle:consume(Ch, Q, Pid),
     
     ct:log("Publish a message on the channel"),
-    {ok, Ch2} = turtle:open_channel(local_test),
-    ok = turtle:publish(Ch2, X, Q, <<"text/plain">>, <<"The turtle and the hare">>),
+    {ok, _Pid} = turtle_publisher:start_link(local_publisher, local_test, [
+        #'exchange.declare' { exchange = X },
+        #'queue.declare' { queue = Q },
+        #'queue.bind' {
+            queue = Q,
+            exchange = X,
+            routing_key = Q
+        }]),
+        
+    turtle:publish(local_publisher, X, Q, <<"text/plain">>,
+        <<"The turtle and the hare">>),
     receive
         {Q, <<"text/plain">>, <<"The turtle and the hare">>} ->
             ok
