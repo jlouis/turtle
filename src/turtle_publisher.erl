@@ -26,7 +26,8 @@
 ]).
 
 -record(state, {
-	channel
+	channel,
+	conn_ref
  }).
 
 %% LIFETIME MAINTENANCE
@@ -49,7 +50,8 @@ publish(Publisher, Exch, Key, ContentType, Payload) ->
 init([Connection, Declarations]) ->
     {ok, Channel} = turtle:open_channel(Connection),
     ok = turtle:declare(Channel, Declarations),
-    {ok, #state { channel = Channel }}.
+    MRef = erlang:monitor(process, Connection),
+    {ok, #state { channel = Channel, conn_ref = MRef }}.
 
 %% @private
 handle_call(Call, From, State) ->
@@ -65,6 +67,8 @@ handle_cast(Cast, State) ->
     {noreply, State}.
 
 %% @private
+handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
+    {stop, {error, {connection_down, Reason}}, State};
 handle_info(Info, State) ->
     lager:warning("Received unknown info msg: ~p", [Info]),
     {noreply, State}.

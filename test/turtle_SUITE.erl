@@ -37,8 +37,9 @@ lifetime_group() ->
     ]}].
 
 basic_group() ->
-   [{basic, [shuffle], [
-       send_recv
+   [{basic, [], [
+       send_recv,
+       kill_connection
    ]}].
 
 groups() ->
@@ -94,8 +95,7 @@ send_recv(_Config) ->
             routing_key = Q
         }]),
         
-    turtle:publish(local_publisher, X, Q, <<"text/plain">>,
-        <<"The turtle and the hare">>),
+    turtle:publish(local_publisher, X, Q, <<"text/plain">>, <<"The turtle and the hare">>),
     receive
         {Q, <<"text/plain">>, <<"The turtle and the hare">>} ->
             ok
@@ -103,6 +103,32 @@ send_recv(_Config) ->
         ct:fail(subscription_timeout)
     end.
     
-        
+kill_connection(_Config) ->
+    X = <<"send_recv_exchange">>,
+    Q = <<"send_recv_queue">>,
+
+    {ok, _Pid} = turtle_publisher:start_link(local_publisher, local_test, [
+        #'exchange.declare' { exchange = X },
+        #'queue.declare' { queue = Q },
+        #'queue.bind' {
+            queue = Q,
+            exchange = X,
+            routing_key = Q
+        }]),
+    
+    process_flag(trap_exit, true),
+    exit(whereis(local_test), dieinafire),
+    receive
+        {'EXIT', _Pid, Reason} ->
+            ct:log("Publisher exit: ~p", [Reason]),
+            ok;
+        Msg ->
+            ct:fail({unexpected_msg, Msg})
+    after 40 ->
+        ct:fail(publisher_did_not_exit)
+    end,
+    process_flag(trap_exit, false),
+    ok.
+
 %% INTERNAL FUNCTIONS
 %% ------------------------------------------
