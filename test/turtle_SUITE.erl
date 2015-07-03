@@ -82,8 +82,8 @@ send_recv(_Config) ->
         Self ! {Key, ContentType, Payload},
         ack
     end,
-    {ok, Pid} = turtle_subscriber:start_link(Ch, F),
-    {ok, _Tag} = turtle:consume(Ch, Q, Pid),
+    {ok, PoolPid} = turtle_subscriber_pool:start_link(),
+    {ok, SubPid} =  turtle_subscriber_pool:add_subscriber(Ch, F, Q),
     
     ct:log("Start a new publisher process"),
     {ok, _Pid} = turtle_publisher:start_link(local_publisher, local_test, [

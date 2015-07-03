@@ -4,7 +4,7 @@
 
 %% Lifetime
 -export([
-	start_link/2
+	start_link/3
 ]).
 
 %% API
@@ -22,20 +22,24 @@
 
 -record(state, {
 	invoke,
-	channel
+	channel,
+	consumer_tag
  }).
 
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
-start_link(Channel, Fun) ->
-    gen_server:start_link(?MODULE, [Channel, Fun], []).
+start_link(Channel, Fun, Queue) ->
+    gen_server:start_link(?MODULE, [Channel, Fun, Queue], []).
 	
 %% CALLBACKS
 %% -------------------------------------------------------------------
 
 %% @private
-init([Channel, Fun]) ->
-    {ok, #state { invoke = Fun, channel = Channel }}.
+init([Channel, Fun, Queue]) ->
+    Sub = #'basic.consume' { queue = Queue },
+    #'basic.consume_ok' { consumer_tag = Tag } =
+        amqp_channel:subscribe(Channel, Sub, self()),
+    {ok, #state { consumer_tag = Tag,  invoke = Fun, channel = Channel }}.
 
 %% @private
 handle_call(Call, From, State) ->
