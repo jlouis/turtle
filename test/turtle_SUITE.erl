@@ -111,6 +111,7 @@ send_recv(_Config) ->
     end.
     
 kill_service(_Config) ->
+    random:seed(),
     X = <<"send_recv_exchange">>,
     Q = <<"send_recv_queue">>,
 
@@ -166,7 +167,7 @@ kill_service(_Config) ->
     true = ChanPid /= ChanPid2,
 
     ct:log("Publish a message on the channel"),
-    M = term_to_binary({msg, rand:uniform(16#FFFF)}),
+    M = term_to_binary({msg, random:uniform(16#FFFF)}),
     turtle:publish(local_publisher, X, Q, <<"text/plain">>, M),
     receive
         {Q, <<"text/plain">>, M} ->
