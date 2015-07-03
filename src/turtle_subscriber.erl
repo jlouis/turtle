@@ -44,7 +44,7 @@ start_link(Channel, Fun, Queue) ->
 init([Channel, Fun, Queue]) ->
     Sub = #'basic.consume' { queue = Queue },
     #'basic.consume_ok' { consumer_tag = Tag } =
-        amqp_channel:subscribe(Channel, Sub, self()),
+        amqp_channel:call(Channel, Sub),
     {ok, #state { consumer_tag = Tag,  invoke = Fun, channel = Channel }}.
 
 %% @private

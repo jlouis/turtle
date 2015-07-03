@@ -19,7 +19,8 @@
 
 %% API
 -export([
-	open_channel/1
+	open_channel/1,
+	close/1
 ]).
 
 -export([
@@ -37,7 +38,8 @@
 	name :: atom(),
 	network_params :: #amqp_params_network{},
 	connection = undefined :: undefined | pid(),
-	retry_time = ?DEFAULT_RETRY_TIME :: pos_integer()
+	retry_time = ?DEFAULT_RETRY_TIME :: pos_integer(),
+	conn_ref = undefined :: undefined | reference()
 }).
 
 %% LIFETIME MAINTENANCE
@@ -45,6 +47,9 @@
 start_link(Name, Configuration) ->
     gen_server:start_link(?MODULE, [Name, Configuration], []).
 	
+close(Name) ->
+    call(Name, close).
+
 open_channel(Name) ->
     call(Name, open_channel).
     
@@ -66,6 +71,9 @@ init([Name, Configuration]) ->
 %% @private
 handle_call(_Msg, _From, #state { connection = undefined } = State) ->
     {reply, {error, no_amqp_connection}, State};
+handle_call(close, _From, #state { connection = Conn } = State) ->
+    ok = amqp_connection:close(Conn),
+    {stop, normal, ok, State};
 handle_call(open_channel, _From, #state { connection = Conn } = State) ->
     ChanRes = amqp_connection:open_channel(Conn),
     {reply, ChanRes, State};
@@ -79,6 +87,8 @@ handle_cast(Cast, State) ->
     {noreply, State}.
 
 %% @private
+handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
+    {stop, {error, {connection_down, Reason}}, State};
 handle_info(connect, #state { name = Name, network_params = NP, retry_time = Retry } = State) ->
     case connect(State) of
         {ok, ConnectedState} ->
@@ -108,7 +118,9 @@ code_change(_, State, _) ->
 %%
 connect(#state { network_params = NP } = State) ->
     case amqp_connection:start(NP) of
-       {ok, Conn} -> {ok, State#state { connection = Conn }};
+       {ok, Conn} ->
+           MRef = erlang:monitor(process, Conn),
+           {ok, State#state { conn_ref = MRef, connection = Conn }};
        {error, Reason} -> {error, Reason}
     end.
 
