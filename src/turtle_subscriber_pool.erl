@@ -7,8 +7,8 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/0]).
--export([add_subscriber/3]).
+-export([start_link/1]).
+-export([add_subscriber/4]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -19,11 +19,11 @@
 %% API functions
 %%====================================================================
 
-start_link() ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+start_link(Name) ->
+    supervisor:start_link({via, gproc, {n,l,{turtle,service_pool,Name}}}, ?MODULE, []).
 
-add_subscriber(Channel, Fun, Queue) ->
-    supervisor:start_child(?MODULE, [Channel, Fun, Queue]).
+add_subscriber(Pool, Channel, Fun, Queue) ->
+    supervisor:start_child(Pool, [Channel, Fun, Queue]).
 
 %%====================================================================
 %% Supervisor callbacks

@@ -37,9 +37,10 @@ lifetime_group() ->
     ]}].
 
 basic_group() ->
-   [{basic, [shuffle], [
+   [{basic, [], [
        send_recv,
-       kill_connection
+       kill_publisher,
+       kill_service
    ]}].
 
 groups() ->
@@ -64,48 +65,92 @@ send_recv(_Config) ->
     X = <<"send_recv_exchange">>,
     Q = <<"send_recv_queue">>,
 
-    ct:log("Open new channel to RabbitMQ"),
-    {ok, Ch} = turtle:open_channel(local_test),
-    ct:log("Declare a standard queue on which to do stuff"),
-    ok = turtle:declare(Ch, [
-        #'exchange.declare' { exchange = X },
-        #'queue.declare' { queue = Q },
-        #'queue.bind' {
-            queue = Q,
-            exchange = X,
-            routing_key = Q
-        }]),
-
-    ct:log("Add a subscriber to the newly declared queue"),
+    ct:log("Add a subscriber service, consuming on Q"),
     Self = self(),
     F = fun(Key, ContentType, Payload) ->
         Self ! {Key, ContentType, Payload},
         ack
     end,
-    {ok, PoolPid} = turtle_subscriber_pool:start_link(),
-    {ok, SubPid} =  turtle_subscriber_pool:add_subscriber(Ch, F, Q),
-    
+    {ok, _ServicePid} = turtle_service:start_link(
+        #{
+            name => local_service,
+            connection => local_test,
+            function => F,
+            declarations =>
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
+            subscriber_count => 3,
+            consume_queue => Q
+        }),         
+
     ct:log("Start a new publisher process"),
-    {ok, _Pid} = turtle_publisher:start_link(local_publisher, local_test, [
-        #'exchange.declare' { exchange = X },
-        #'queue.declare' { queue = Q },
-        #'queue.bind' {
-            queue = Q,
-            exchange = X,
-            routing_key = Q
-        }]),
+    {ok, _Pid} = turtle_publisher:start_link(local_publisher, local_test, 
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }]),
+    
+    ct:log("Await the start of the publisher"),
     gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
+    ct:log("Await the start of the service"),
+    gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
 
     ct:log("Publish a message on the channel"),
     turtle:publish(local_publisher, X, Q, <<"text/plain">>, <<"The turtle and the hare">>),
     receive
         {Q, <<"text/plain">>, <<"The turtle and the hare">>} ->
             ok
-    after 40 ->
+    after 400 ->
         ct:fail(subscription_timeout)
     end.
     
-kill_connection(_Config) ->
+kill_service(_Config) ->
+    X = <<"send_recv_exchange">>,
+    Q = <<"send_recv_queue">>,
+
+    ct:log("Add a subscriber service, consuming on Q"),
+    Self = self(),
+    F = fun(Key, ContentType, Payload) ->
+        Self ! {Key, ContentType, Payload},
+        ack
+    end,
+    {ok, _ServicePid} = turtle_service:start_link(
+        #{
+            name => local_service,
+            connection => local_test,
+            function => F,
+            declarations =>
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
+            subscriber_count => 3,
+            consume_queue => Q
+        }),
+    ct:log("Await the start of the service"),
+    gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+         
+    ct:log("Kill the connection, check that the service goes away"),
+    ConnPid = gproc:where({n,l,{turtle,connection,local_test}}),
+    ChanPid = gproc:where({n,l,{turtle,service_channel,local_service}}),
+    MRef = erlang:monitor(process, ChanPid),
+    true = (ChanPid /= undefined),
+    exit(ConnPid, s_dieinafire),
+    receive
+        {'DOWN', MRef, process, _, Reason} ->
+            ct:log("Service Chan exit: ~p", [Reason]),
+            ok;
+        Msg ->
+            ct:fail({unexpected_msg, Msg})
+    after 400 ->
+        ct:fail(service_did_not_exit)
+    end,
+    
+    ct:log("Check that the process got restarted and re-registered itself"),
+    ChanPid2 = gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+    true = ChanPid /= ChanPid2,
+    ok.
+
+kill_publisher(_Config) ->
     X = <<"send_recv_exchange">>,
     Q = <<"send_recv_queue">>,
 
@@ -131,7 +176,7 @@ kill_connection(_Config) ->
             ok;
         Msg ->
             ct:fail({unexpected_msg, Msg})
-    after 40 ->
+    after 400 ->
         ct:fail(publisher_did_not_exit)
     end,
     process_flag(trap_exit, false),
