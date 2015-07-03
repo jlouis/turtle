@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%% @doc turtle public API
+%% @doc Turtle application callback for managing the lifetime of the system.
 %% @end
 %%%-------------------------------------------------------------------
 %% @private

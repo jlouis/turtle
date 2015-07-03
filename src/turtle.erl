@@ -1,3 +1,6 @@
+%% @doc External APi for the Turtle subsystem
+%% The interface to the Turtle system for other subsystems
+%% @end
 -module(turtle).
 -include_lib("amqp_client/include/amqp_client.hrl").
 

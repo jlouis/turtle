@@ -1,3 +1,5 @@
+%%% @doc Configuration management for the Turtle subsystem
+%%% @end
 %% @private
 -module(turtle_config).
 

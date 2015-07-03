@@ -1,3 +1,13 @@
+%%% @doc Manage a connection to AMQP
+%% This module provides a persistent connection to AMQP for an Erlang node(). It will
+%% make sure a connection is kept alive toward the target, and it will try reconnecting
+%% if the connection is lost (and this process is supervised).
+%%
+%% Once a connection is established, this process will register itself in gproc under the
+%% name `{turtle, connection, Name}', where `Name' is given when start_link/1'ing this
+%% process.
+%%% @end
+%% @private
 -module(turtle_conn).
 -behaviour(gen_server).
 -include_lib("amqp_client/include/amqp_client.hrl").

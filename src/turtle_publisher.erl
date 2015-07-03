@@ -1,3 +1,6 @@
+%%% @doc The publisher is a helper for publishing messages on a channel
+%%% @end
+%%% @private
 -module(turtle_publisher).
 -behaviour(gen_server).
 -include_lib("amqp_client/include/amqp_client.hrl").

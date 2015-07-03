@@ -1,3 +1,9 @@
+%%% @doc subscribe to a channel, consume messages, process messages by a function
+%% This module will subscribe to a target channel and start consuming on the channel.
+%% Once consumption is started, it will process each incoming message by invoking a
+%% function on each incoming message.
+%%% @end
+%% @private
 -module(turtle_subscriber).
 -behaviour(gen_server).
 -include_lib("amqp_client/include/amqp_client.hrl").
