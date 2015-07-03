@@ -7,7 +7,7 @@
 
 %% Lifetime
 -export([
-	start_link/1
+    start_link/1
 ]).
 
 %% API
@@ -24,9 +24,10 @@
 ]).
 
 -record(state, {
-	channel,
-	conf,
-	conn_ref
+    name,
+    channel,
+    conf,
+    conn_ref
  }).
 
 %% LIFETIME MAINTENANCE
@@ -55,23 +56,27 @@ handle_cast(Cast, State) ->
 
 %% @private
 handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, Ref,
-	#{
-	  name := Name,
-	  connection := ConnName,
-	  declarations := Decls,
-	  function := Fun,
-	  consume_queue := Queue,
-	  subscriber_count := K
-	 } = Conf }) ->
+    #{
+      name := Name,
+      connection := ConnName,
+      declarations := Decls,
+      function := Fun,
+      consume_queue := Queue,
+      subscriber_count := K
+     } = Conf }) ->
     {ok, Ch} = turtle:open_channel(ConnName),
+    ok = amqp_channel:register_return_handler(Ch, self()),
     ok = turtle:declare(Ch, Decls),
     Pool = gproc:where({n,l,{turtle,service_pool, Name}}),
     add_subscribers(Pool, Ch, Fun, Queue, K),
     MRef = erlang:monitor(process, Pid),
     reg(Name),
-    {noreply, #state { conn_ref = MRef, channel = Ch, conf = Conf }};
+    {noreply, #state { conn_ref = MRef, channel = Ch, conf = Conf, name = Name }};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
     {stop, {error, {connection_down, Reason}}, State};
+handle_info(#'basic.return' {} = Return, #state { name = Name } = State) ->
+    lager:warning("Channel ~p received a return from AMQP: ~p", [Name, Return]),
+    {noreply, State};
 handle_info(Info, State) ->
     lager:warning("Unknown info msg: ~p", [Info]),
     {noreply, State}.
