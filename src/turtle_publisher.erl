@@ -11,7 +11,7 @@
 
 %% API
 -export([
-	publish/5
+	publish/6
 ]).
 
 -export([
@@ -42,11 +42,12 @@ start_link(Name, Connection, Declarations) ->
 %% has shown that you end up having to tweak these things quite a lot in practice.
 %% Hence we provide the full kind of messaging, rather than a subset
 %% @end
-publish(Publisher, Exch, Key, ContentType, Payload) ->
+publish(Publisher, Exch, Key, ContentType, Payload, Opts) ->
     Pub = #'basic.publish' {
         exchange = Exch,
         routing_key = Key
     },
+    Props = properties(ContentType, Opts),
     Props = #'P_basic' { content_type = ContentType },
     Pid = gproc:where({n,l,{turtle,publisher,Publisher}}),
     gen_server:cast(Pid, {publish, Pub, Props, Payload}).
@@ -106,3 +107,9 @@ code_change(_, State, _) ->
 %%
 reg(Name) ->
     true = gproc:reg({n,l,{turtle,publisher, Name}}).
+
+%% Compute the properties of an AMQP message
+properties(ContentType, #{ delivery_mode := persistent }) ->
+    #'P_basic' { content_type = ContentType, delivery_mode = 2 };
+properties(ContentType, #{ delivery_mode := ephermeral }) ->
+    #'P_basic' { content_type = ContentType }.

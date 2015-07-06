@@ -54,18 +54,26 @@ declare(Channel, [#'queue.bind' {} = Queue | Ds]) ->
     #'queue.bind_ok'{} = amqp_channel:call(Channel, Queue),
     declare(Channel, Ds).
 
-%% @doc publish(Name, Exch, Key, ContentType, Payload) publishes messages.
+%% @equiv publish(Name, Exch, Key, ContentType, Payload, #{})
+publish(Pub, X, Key, CType, Payload) ->
+    publish(Pub, X, Key, CType, Payload, #{ delivery_mode => ephermeral }).
+
+%% @doc publish(Name, Exch, Key, ContentType, Payload, Opts) publishes messages.
 %%
 %% This publication variant requires you to have started a publisher already through
 %% the supervisor tree. It will look up the appropriate publisher under the given `Name',
 %% and will publish on `Exch' with routing key `Key', content-type `ContentType' and the
 %% given `Payload'.
 %%
+%% Options is a map of options. Currently we support:
+%%
+%% * delivery_mode :: persistent | ephermeral (ephermeral is the default)
+%%
 %% Publication is asynchronous, so it never fails, but of course, if network conditions are
 %% outright miserable, it may fail to publish the message.
 %% @end
-publish(Pub, X, Key, CType, Payload) ->
-    turtle_publisher:publish(Pub, X, Key, CType, Payload).
+publish(Pub, X, Key, CType, Payload, Opts) ->
+    turtle_publisher:publish(Pub, X, Key, CType, Payload, Opts).
 
 %% @doc consume/2 starts consumption on a channel with default parameters
 %% @end
