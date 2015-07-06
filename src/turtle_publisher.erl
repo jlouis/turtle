@@ -1,6 +1,5 @@
 %%% @doc The publisher is a helper for publishing messages on a channel
 %%% @end
-%%% @private
 -module(turtle_publisher).
 -behaviour(gen_server).
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -13,10 +12,6 @@
 %% API
 -export([
 	publish/5
-]).
-
-%% API
--export([
 ]).
 
 -export([
@@ -35,9 +30,18 @@
 
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
+
+%% @doc Start a new publication worker
+%% Provides an OTP gen_server for supervisor linkage
+%% @end
 start_link(Name, Connection, Declarations) ->
     gen_server:start_link(?MODULE, [Name, Connection, Declarations], []).
 
+%% @doc publish a message asynchronously to RabbitMQ
+%% The specification is that you have to provide all parameters, because experience
+%% has shown that you end up having to tweak these things quite a lot in practice.
+%% Hence we provide the full kind of messaging, rather than a subset
+%% @end
 publish(Publisher, Exch, Key, ContentType, Payload) ->
     Pub = #'basic.publish' {
         exchange = Exch,

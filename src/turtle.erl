@@ -1,5 +1,16 @@
-%% @doc External APi for the Turtle subsystem
-%% The interface to the Turtle system for other subsystems
+%% @doc External API for the Turtle subsystem.
+%%
+%% The interface to the Turtle system for other subsystems. You probably want to
+%% start a `turtle_publisher' and a `turtle_subscriber' in your application, and then
+%% use the `publish/5' command in this module to publish messages. The subscriber
+%% is used by providing a function to it, which is called whenever messages arrive on
+%% the subscribed channel.
+%%
+%% Other functions in this module are low-level functions. They are not meant for use
+%% in applications directly, but in the future, we may have to tip-toe ourselves through
+%% a special case or two. Hence, they are still exported and documented so people know
+%% they are there.
+%%
 %% @end
 -module(turtle).
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -32,8 +43,7 @@ open_channel(Name) -> turtle_conn:open_channel(Name).
 -type declaration() :: #'exchange.declare'{} | #'queue.declare'{}.
 
 -spec declare(channel(), [declaration()]) -> ok.
-declare(_Channel, []) ->
-    ok;
+declare(_Channel, []) -> ok;
 declare(Channel, [#'exchange.declare' {} = Exch | Ds]) ->
     #'exchange.declare_ok'{} = amqp_channel:call(Channel, Exch),
     declare(Channel, Ds);

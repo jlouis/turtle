@@ -5,7 +5,6 @@
 %% do work in the system.
 %% @end
 %%%-------------------------------------------------------------------
-%% @private
 -module(turtle_service).
 
 -behaviour(supervisor).
@@ -22,6 +21,9 @@
 %% API functions
 %%====================================================================
 
+%% @doc Start the service supervisor tree
+%% This tree is ready for OTP linkage
+%% @end
 start_link(#{ name := Name } = Conf) ->
     supervisor:start_link({via, gproc, {n,l,{turtle,service,Name}}}, ?MODULE, [Conf]).
 
