@@ -12,7 +12,7 @@
    ]},
   {env,[
       {gproc_env_order, [app_env, error]},
-      {connection_config, [#{ conn_name => local_test }]}
+      {connection_config, [#{ conn_name => amqp_server }]}
   ]},
   {modules, []}
  ]}.

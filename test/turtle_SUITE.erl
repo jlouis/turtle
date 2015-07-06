@@ -6,7 +6,7 @@
 
 suite() ->
     [{timetrap, {seconds, 15}}].
-    
+
 init_per_group(basic, Config) ->
 %%     {ok, _SaslApps} = application:ensure_all_started(sasl),
 %%     dbg:tracer(),
@@ -80,7 +80,7 @@ send_recv(_Config) ->
     {ok, _ServicePid} = turtle_service:start_link(
         #{
             name => local_service,
-            connection => local_test,
+            connection => amqp_server,
             function => F,
             declarations =>
                [#'exchange.declare' { exchange = X },
@@ -88,14 +88,14 @@ send_recv(_Config) ->
                 #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
             subscriber_count => 3,
             consume_queue => Q
-        }),         
+        }),
 
     ct:log("Start a new publisher process"),
-    {ok, _Pid} = turtle_publisher:start_link(local_publisher, local_test, 
+    {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,
                [#'exchange.declare' { exchange = X },
                 #'queue.declare' { queue = Q },
                 #'queue.bind' { queue = Q, exchange = X, routing_key = Q }]),
-    
+
     ct:log("Await the start of the publisher"),
     gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
     ct:log("Await the start of the service"),
@@ -109,7 +109,7 @@ send_recv(_Config) ->
     after 400 ->
         ct:fail(subscription_timeout)
     end.
-    
+
 kill_service(_Config) ->
     random:seed(),
     X = <<"send_recv_exchange">>,
@@ -124,7 +124,7 @@ kill_service(_Config) ->
     {ok, _ServicePid} = turtle_service:start_link(
         #{
             name => local_service,
-            connection => local_test,
+            connection => amqp_server,
             function => F,
             declarations =>
                [#'exchange.declare' { exchange = X },
@@ -137,13 +137,13 @@ kill_service(_Config) ->
     gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
 
     ct:log("Flush the queue"),
-    flush(),         
+    flush(),
     ct:log("Kill the connection, check that the service goes away"),
-    ConnPid = gproc:where({n,l,{turtle,connection,local_test}}),
+    ConnPid = gproc:where({n,l,{turtle,connection, amqp_server}}),
     ChanPid = gproc:where({n,l,{turtle,service_channel,local_service}}),
     MRef = erlang:monitor(process, ChanPid),
     true = (ChanPid /= undefined),
-    turtle_conn:close(local_test),
+    turtle_conn:close(amqp_server),
     receive
         {'DOWN', MRef, process, _, Reason} ->
             ct:log("Service Chan exit: ~p", [Reason]),
@@ -151,15 +151,15 @@ kill_service(_Config) ->
     after 400 ->
         ct:fail(service_did_not_exit)
     end,
-    
+
     ct:log("Service restarted, now try using it!"),
 
     ct:log("Start a new publisher process"),
-    {ok, _Pid} = turtle_publisher:start_link(local_publisher, local_test, 
+    {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,
                [#'exchange.declare' { exchange = X },
                 #'queue.declare' { queue = Q },
                 #'queue.bind' { queue = Q, exchange = X, routing_key = Q }]),
-    
+
     ct:log("Await the start of the publisher"),
     gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
     ct:log("Check that the process got restarted and re-registered itself"),
@@ -186,7 +186,7 @@ kill_publisher(_Config) ->
     Q = <<"send_recv_queue">>,
 
     ct:log("Start the publisher on the connection"),
-    {ok, _Pid} = turtle_publisher:start_link(local_publisher, local_test, [
+    {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server, [
         #'exchange.declare' { exchange = X },
         #'queue.declare' { queue = Q },
         #'queue.bind' {
@@ -195,12 +195,12 @@ kill_publisher(_Config) ->
             routing_key = Q
         }]),
     gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
-    
+
     ct:log("Kill the connection, check that the publisher goes away"),
     process_flag(trap_exit, true),
-    ConnPid = gproc:where({n,l,{turtle,connection,local_test}}),
+    ConnPid = gproc:where({n,l,{turtle,connection,amqp_server}}),
     PublisherPid = gproc:where({n,l,{turtle,publisher,local_publisher}}),
-    turtle_conn:close(local_test),
+    turtle_conn:close(amqp_server),
     receive
         {'EXIT', PublisherPid, Reason} ->
             ct:log("Publisher exit: ~p", [Reason]),
