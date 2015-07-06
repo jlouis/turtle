@@ -19,7 +19,7 @@
 -export([
 	declare/2,
 	open_channel/1,
-	publish/5,
+	publish/5, publish/6,
 	consume/2
 ]).
 
