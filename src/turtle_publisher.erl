@@ -48,7 +48,6 @@ publish(Publisher, Exch, Key, ContentType, Payload, Opts) ->
         routing_key = Key
     },
     Props = properties(ContentType, Opts),
-    Props = #'P_basic' { content_type = ContentType },
     Pid = gproc:where({n,l,{turtle,publisher,Publisher}}),
     gen_server:cast(Pid, {publish, Pub, Props, Payload}).
 
