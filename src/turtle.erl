@@ -20,7 +20,7 @@
 	declare/2,
 	open_channel/1,
 	publish/5,
-	consume/3
+	consume/2
 ]).
 
 -type channel() :: pid().
@@ -54,15 +54,23 @@ declare(Channel, [#'queue.bind' {} = Queue | Ds]) ->
     #'queue.bind_ok'{} = amqp_channel:call(Channel, Queue),
     declare(Channel, Ds).
 
-%% @doc publish(Chan, Exch, Key, Payload) publishes messages on a channel
-%% Low-level helper. Publish a `Payload' on the exchange `Exch' with routing key `Key'
+%% @doc publish(Name, Exch, Key, ContentType, Payload) publishes messages.
+%%
+%% This publication variant requires you to have started a publisher already through
+%% the supervisor tree. It will look up the appropriate publisher under the given `Name',
+%% and will publish on `Exch' with routing key `Key', content-type `ContentType' and the
+%% given `Payload'.
+%%
+%% Publication is asynchronous, so it never fails, but of course, if network conditions are
+%% outright miserable, it may fail to publish the message.
 %% @end
 publish(Pub, X, Key, CType, Payload) ->
     turtle_publisher:publish(Pub, X, Key, CType, Payload).
 
-
-consume(Channel, Queue, ConsumerPid) ->
+%% @doc consume/2 starts consumption on a channel with default parameters
+%% @end
+consume(Channel, Queue) ->
    Sub = #'basic.consume' { queue = Queue },
    #'basic.consume_ok' { consumer_tag = Tag } =
-       amqp_channel:subscribe(Channel, Sub, ConsumerPid),
+       amqp_channel:call(Channel, Sub),
    {ok, Tag}.
