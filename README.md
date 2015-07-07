@@ -2,6 +2,14 @@
 
 The `turtle` application maintains RabbitMQ connections. Its purpose is to keep connections alive to a set of RabbitMQ clusters. Furthermore, other applications, using RabbitMQ, can request connectivity through the `turtle` application, so they don't have to maintain a lot of the stuff themselves.
 
+## Testing
+
+The tests has a prerequisite which is a running `rabbitmq-server`. In the Travis CI environment, we request such a server to be running, so we can carry out tests against it, but for local development, you will need to add such a server to the environment.
+
+Running tests is as simple as:
+
+	make test
+
 ## Motivation
 
 We need to talk a lot of RabbitMQ if we are to start slowly hoisting work out of existing systems and into Erlang. In a transition phase, we need some way to communicate. RabbitMQs strength here is its topology-flexibility, not its speed. We don't think we'll hit any speed problem in RMQ for the forseeable future, but the flexibility of the platform is a nice thing to have.

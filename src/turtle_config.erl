@@ -12,9 +12,9 @@ read_params() ->
 
 conn_params(Ps) ->
     #amqp_params_network {
-        username = maps:get(username, Ps, <<"guest">>),
-        password = maps:get(password, Ps, <<"guest">>),
-        virtual_host = maps:get(virtual_host, Ps, <<"/">>),
+        username = list_to_binary(maps:get(username, Ps, "guest")),
+        password = list_to_binary(maps:get(password, Ps, "guest")),
+        virtual_host = list_to_binary(maps:get(virtual_host, Ps, "/")),
         host = maps:get(host, Ps, "localhost"),
         port = maps:get(port, Ps, 5672),
         
