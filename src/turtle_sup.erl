@@ -42,23 +42,5 @@ configure_connectors() ->
 
 conn_sup(#{ conn_name := Name } = Ps) ->
     {Name,
-        {turtle_conn, start_link, [Name, conn_params(Ps)]},
+        {turtle_conn, start_link, [Name, turtle_config:conn_params(Ps)]},
         permanent, infinity, supervisor, [turtle_conn_sup]}.
-
-conn_params(Ps) ->
-    #amqp_params_network {
-        username = maps:get(username, Ps, <<"guest">>),
-        password = maps:get(password, Ps, <<"guest">>),
-        virtual_host = maps:get(virtual_host, Ps, <<"/">>),
-        host = maps:get(host, Ps, "localhost"),
-        port = maps:get(port, Ps, 5672),
-        
-        channel_max = maps:get(channel_max, Ps, 0),
-        frame_max = maps:get(frame_max, Ps, 0),
-        heartbeat = maps:get(heartbeat, Ps, 15)
-        
-        %% Not setting:
-        %%  - ssl_options
-        %%  - auth_mechanisms
-        %%  - client_properties
-    }.
