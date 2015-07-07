@@ -8,7 +8,7 @@
 
 %% API
 -export([start_link/1]).
--export([add_subscriber/4]).
+-export([add_subscriber/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -22,8 +22,8 @@
 start_link(Name) ->
     supervisor:start_link({via, gproc, {n,l,{turtle,service_pool,Name}}}, ?MODULE, []).
 
-add_subscriber(Pool, Channel, Fun, Queue) ->
-    supervisor:start_child(Pool, [Channel, Fun, Queue]).
+add_subscriber(Pool, Config) ->
+    supervisor:start_child(Pool, [Config]).
 
 %%====================================================================
 %% Supervisor callbacks

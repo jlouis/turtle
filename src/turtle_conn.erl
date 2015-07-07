@@ -87,9 +87,12 @@ handle_cast(Cast, State) ->
     {noreply, State}.
 
 %% @private
-handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
+handle_info({'DOWN', MRef, process, _, Reason},
+	#state { name = Name, conn_ref = MRef } = State) ->
+    lager:warning("Lost connection to AMQP for conn_name = ~p", [Name]),
     {stop, {error, {connection_down, Reason}}, State};
-handle_info(connect, #state { name = Name, network_params = NP, retry_time = Retry } = State) ->
+handle_info(connect,
+	#state { name = Name, network_params = NP, retry_time = Retry } = State) ->
     case connect(State) of
         {ok, ConnectedState} ->
             reg(Name),
@@ -98,7 +101,8 @@ handle_info(connect, #state { name = Name, network_params = NP, retry_time = Ret
             lager:error("Unknown host while connecting to RabbitMQ: ~p", [NP]),
             {stop, {error, unknown_host}, State};
         {error, timeout} ->
-            lager:warning("Timeout while connecting to RabbitMQ: ~p", [NP]),
+            lager:warning("Timeout while connecting to RabbitMQ, retrying in ~Bs: ~p",
+                [Retry div 1000, NP]),
             erlang:send_after(Retry, self(), connect),
             {noreply, State}
     end;

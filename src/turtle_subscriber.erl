@@ -10,7 +10,7 @@
 
 %% Lifetime
 -export([
-	start_link/3
+	start_link/1
 ]).
 
 %% API
@@ -27,6 +27,8 @@
 ]).
 
 -record(state, {
+	conn_name,
+	name,
 	invoke,
 	channel,
 	consumer_tag
@@ -34,16 +36,28 @@
 
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
-start_link(Channel, Fun, Queue) ->
-    gen_server:start_link(?MODULE, [Channel, Fun, Queue], []).
+start_link(Config) ->
+    gen_server:start_link(?MODULE, [Config], []).
 	
 %% CALLBACKS
 %% -------------------------------------------------------------------
 
 %% @private
-init([Channel, Fun, Queue]) ->
+init([#{
+        channel := Channel,
+        consume_queue := Queue,
+        function := Fun,
+        connection := ConnName,
+        name := Name }]) ->
     {ok, Tag} = turtle:consume(Channel, Queue),
-    {ok, #state { consumer_tag = Tag,  invoke = Fun, channel = Channel }}.
+    ok = exometer:ensure([ConnName, Name, msgs], spiral, []),
+    ok = exometer:ensure([ConnName, Name, latency], histogram, []),
+    {ok, #state {
+        consumer_tag = Tag, 
+        invoke = Fun,
+        channel = Channel,
+        conn_name = ConnName,
+        name = Name }}.
 
 %% @private
 handle_call(Call, From, State) ->
@@ -59,11 +73,17 @@ handle_cast(Cast, State) ->
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 handle_info(#'basic.cancel_ok'{}, State) ->
+    lager:info("Consumption canceled"),
     {stop, normal, State};
 handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
-	#state { invoke = Fun, channel = Channel } = State) ->
+	#state { invoke = Fun, channel = Channel, conn_name = CN, name = N } = State) ->
+    S = erlang:monotonic_time(),
     case handle_message(Fun, Key, Content) of
         ack ->
+           E = erlang:monotonic_time(),
+           exometer:update([CN, N, msgs], 1),
+           exometer:update([CN, N, latency],
+              erlang:convert_time_unit(E - S, native, milli_seconds)),
            ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag });
         ok ->
            ignore

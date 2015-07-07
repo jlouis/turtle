@@ -27,7 +27,6 @@
 start_link(#{ name := Name } = Conf) ->
     supervisor:start_link({via, gproc, {n,l,{turtle,service,Name}}}, ?MODULE, [Conf]).
 
-
 %%====================================================================
 %% Supervisor callbacks
 %%====================================================================

@@ -68,14 +68,14 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, Ref,
     ok = amqp_channel:register_return_handler(Ch, self()),
     ok = turtle:declare(Ch, Decls),
     Pool = gproc:where({n,l,{turtle,service_pool, Name}}),
-    add_subscribers(Pool, Ch, Fun, Queue, K),
+    add_subscribers(Pool, Conf#{ channel => Ch}, K),
     MRef = erlang:monitor(process, Pid),
     reg(Name),
     {noreply, #state { conn_ref = MRef, channel = Ch, conf = Conf, name = Name }};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
     {stop, {error, {connection_down, Reason}}, State};
 handle_info(#'basic.return' {} = Return, #state { name = Name } = State) ->
-    lager:warning("Channel ~p received a return from AMQP: ~p", [Name, Return]),
+    lager:info("Channel ~p received a return from AMQP: ~p", [Name, Return]),
     {noreply, State};
 handle_info(Info, State) ->
     lager:warning("Unknown info msg: ~p", [Info]),
@@ -93,10 +93,10 @@ code_change(_, State, _) ->
 %% INTERNAL FUNCTIONS
 %%
 
-add_subscribers(_Pool, _Ch, _Fun, _Queue, 0) -> ok;
-add_subscribers(Pool, Ch, Fun, Queue, K) ->
-    turtle_subscriber_pool:add_subscriber(Pool, Ch, Fun, Queue),
-    add_subscribers(Pool, Ch, Fun, Queue, K-1).
+add_subscribers(_Pool, _Conf, 0) -> ok;
+add_subscribers(Pool, Conf, K) ->
+    turtle_subscriber_pool:add_subscriber(Pool, Conf),
+    add_subscribers(Pool, Conf, K-1).
 
 %% Make sure our config object is inhabitated correctly.
 validate_config(#{

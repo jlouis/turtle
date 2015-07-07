@@ -31,6 +31,9 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     ok.
 
+init_per_testcase(send_recv, Config) ->
+    exometer:delete([amqp_server, local_publisher, casts]),
+    Config;
 init_per_testcase(_Case, Config) ->
     Config.
 
@@ -108,7 +111,15 @@ send_recv(_Config) ->
             ok
     after 400 ->
         ct:fail(subscription_timeout)
-    end.
+    end,
+    
+    {ok, PVals} = exometer:get_value([amqp_server, local_publisher, casts]),
+    1 = proplists:get_value(one, PVals),
+    {ok, SVals} = exometer:get_value([amqp_server, local_service, msgs]),
+    ct:log("Latency structure: ~p", [SVals]),
+    1 = proplists:get_value(one, SVals),
+    {ok, _SLvals} = exometer:get_value([amqp_server, local_service, latency]),
+    ok.
 
 kill_service(_Config) ->
     random:seed(),

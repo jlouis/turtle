@@ -8,7 +8,8 @@
     stdlib,
     lager,
     amqp_client,
-    gproc
+    gproc,
+    exometer_core
    ]},
   {env,[
       {gproc_env_order, [app_env, error]},

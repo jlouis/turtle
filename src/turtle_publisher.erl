@@ -24,6 +24,8 @@
 ]).
 
 -record(state, {
+         conn_name,
+         name,
 	channel,
 	conn_ref
  }).
@@ -60,6 +62,7 @@ init([Name, ConnName, Declarations]) ->
     %% a connection under the given name without blocking the process. We replace
     %% the state with a #state{} record once that happens (see handle_info/2)
     Ref = gproc:nb_wait({n,l,{turtle,connection,ConnName}}),
+    ok = exometer:ensure([ConnName, Name, casts], spiral, []),
     {ok, {initializing, Name, Ref, ConnName, Declarations}}.
 
 %% @private
@@ -73,8 +76,10 @@ handle_cast(Pub, {initializing, _, _, _, _} = Init) ->
     %% happen, so we log them
     lager:warning("Publish while initializing: ~p", [Pub]),
     {noreply, Init};
-handle_cast({publish, Pub, Props, Payload}, #state { channel = Ch } = State) ->
+handle_cast({publish, Pub, Props, Payload},
+	#state { channel = Ch, conn_name = ConnName, name = Name } = State) ->
     ok = amqp_channel:cast(Ch, Pub, #amqp_msg { props = Props, payload = Payload }),
+    exometer:update([ConnName, Name, casts], 1),
     {noreply, State};
 handle_cast(Cast, State) ->
     lager:warning("Unknown cast: ~p", [Cast]),
@@ -86,7 +91,12 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, N, Ref, CName,
     ok = turtle:declare(Channel, Decls),
     MRef = erlang:monitor(process, Pid),
     reg(N),
-    {noreply, #state { channel = Channel, conn_ref = MRef}};
+    {noreply,
+      #state {
+        channel = Channel,
+        conn_ref = MRef,
+        conn_name = CName,
+        name = N}};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
     {stop, {error, {connection_down, Reason}}, State};
 handle_info(Info, State) ->
