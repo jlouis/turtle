@@ -77,13 +77,13 @@ handle_info(#'basic.cancel_ok'{}, State) ->
     {stop, normal, State};
 handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
 	#state { invoke = Fun, channel = Channel, conn_name = CN, name = N } = State) ->
-    S = erlang:monotonic_time(),
+    S = turtle_time:monotonic_time(),
     case handle_message(Fun, Key, Content) of
         ack ->
-           E = erlang:monotonic_time(),
+           E = turtle_time:monotonic_time(),
            exometer:update([CN, N, msgs], 1),
            exometer:update([CN, N, latency],
-              erlang:convert_time_unit(E - S, native, milli_seconds)),
+              turtle_time:convert_time_unit(E - S, native, milli_seconds)),
            ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag });
         ok ->
            ignore
