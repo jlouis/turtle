@@ -100,6 +100,10 @@ handle_info(connect,
         {error, unknown_host} ->
             lager:error("Unknown host while connecting to RabbitMQ: ~p", [NP]),
             {stop, {error, unknown_host}, State};
+        {error,econnrefused} ->
+            lager:info("AMQP Connection refused, retrying"),
+            erlang:send_after(Retry, self(), connect),
+            {noreply, State};
         {error, timeout} ->
             lager:warning("Timeout while connecting to RabbitMQ, retrying in ~Bs: ~p",
                 [Retry div 1000, NP]),
