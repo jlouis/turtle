@@ -6,13 +6,16 @@
   {applications,
    [kernel,
     stdlib,
-    lager,
+
     amqp_client,
+    exometer_core,
     gproc,
-    exometer_core
+    lager,
+    msgpack,
+    uuid
    ]},
   {env,[
-      {gproc_env_order, [app_env, error]},
+      {gproc_env_order, [os_env, app_env, error]},
       {connection_config, [#{ conn_name => amqp_server }]}
   ]},
   {modules, []}
