@@ -8,7 +8,7 @@
 
 read_params() ->
     {ok, EnvOrder} = application:get_env(turtle, gproc_env_order),
-    gproc:get_env(l,turtle,connection_config, EnvOrder).
+    gproc:get_set_env(l,turtle,connection_config, EnvOrder).
 
 conn_params(Ps) ->
     #amqp_params_network {
