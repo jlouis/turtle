@@ -90,6 +90,7 @@ send_recv(_Config) ->
                 #'queue.declare' { queue = Q },
                 #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
             subscriber_count => 3,
+            prefetch_count => 10,
             consume_queue => Q
         }),
 

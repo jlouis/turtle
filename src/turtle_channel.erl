@@ -60,11 +60,12 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, Ref,
       name := Name,
       connection := ConnName,
       declarations := Decls,
-      function := Fun,
-      consume_queue := Queue,
+      function := _Fun,
+      consume_queue := _Queue,
       subscriber_count := K
      } = Conf }) ->
     {ok, Ch} = turtle:open_channel(ConnName),
+    ok = setup_qos(Ch, Conf),
     ok = amqp_channel:register_return_handler(Ch, self()),
     ok = turtle:declare(Ch, Decls),
     Pool = gproc:where({n,l,{turtle,service_pool, Name}}),
@@ -109,3 +110,9 @@ validate_config(#{
 
 reg(N) ->
     true = gproc:reg({n,l,{turtle,service_channel,N}}).
+
+setup_qos(Ch, #{ prefetch_count := K }) ->
+    #'basic.qos_ok'{} = amqp_channel:call(Ch, #'basic.qos' { prefetch_count = K }),
+    ok;
+setup_qos(_Ch, _Conf) -> ok.
+
