@@ -76,7 +76,7 @@ send_recv(_Config) ->
 
     ct:log("Add a subscriber service, consuming on Q"),
     Self = self(),
-    F = fun(Key, ContentType, Payload) ->
+    F = fun(Key, ContentType, Payload, _State) ->
         Self ! {Key, ContentType, Payload},
         ack
     end,
@@ -128,7 +128,7 @@ kill_service(_Config) ->
 
     ct:log("Add a subscriber service, consuming on Q"),
     Self = self(),
-    F = fun(Key, ContentType, Payload) ->
+    F = fun(Key, ContentType, Payload, _State) ->
         Self ! {Key, ContentType, Payload},
         ack
     end,

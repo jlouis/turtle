@@ -30,6 +30,7 @@
 	conn_name,
 	name,
 	invoke,
+	invoke_state = init,
 	channel,
 	consumer_tag
  }).
@@ -55,6 +56,7 @@ init([#{
     {ok, #state {
         consumer_tag = Tag, 
         invoke = Fun,
+        invoke_state = init,
         channel = Channel,
         conn_name = ConnName,
         name = Name }}.
@@ -76,19 +78,21 @@ handle_info(#'basic.cancel_ok'{}, State) ->
     lager:info("Consumption canceled"),
     {stop, normal, State};
 handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
-	#state { invoke = Fun, channel = Channel, conn_name = CN, name = N } = State) ->
+	#state {
+	  invoke = Fun, invoke_state = IState,
+	  channel = Channel, conn_name = CN, name = N } = State) ->
     S = turtle_time:monotonic_time(),
-    case handle_message(Fun, Key, Content) of
-        ack ->
+    case handle_message(Fun, Key, Content, IState) of
+        {ack, IState2} ->
            E = turtle_time:monotonic_time(),
            exometer:update([CN, N, msgs], 1),
            exometer:update([CN, N, latency],
-              turtle_time:convert_time_unit(E - S, native, milli_seconds)),
-           ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag });
+             turtle_time:convert_time_unit(E-S, native, milli_seconds)),
+           ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag }),
+           {noreply, State#state { invoke_state = IState2 }};
         ok ->
-           ignore
-    end,           
-    {noreply, State};
+           {noreply, State}
+    end;
 handle_info(_, State) ->
     {noreply, State}.
 
@@ -106,9 +110,10 @@ code_change(_, State, _) ->
 handle_message(Fun, Key,
 	#amqp_msg {
 	    payload = Payload,
-	    props = #'P_basic' { content_type = Type }} = M) ->
-    try Fun(Key, Type, Payload) of
-        ack -> ack
+	    props = #'P_basic' { content_type = Type }} = M, IState) ->
+    try Fun(Key, Type, Payload, IState) of
+        ack -> {ack, IState};
+        {ack, IState2} -> {ack, IState2}
     catch
         Class:Error ->
             lager:warning("Cannot handle message ~p: ~p:~p", [format_amqp_msg(M), Class, Error]),
