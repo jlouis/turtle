@@ -93,11 +93,11 @@ handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
         reject ->
            exometer:update([CN, N, rejects], 1),
            ok = amqp_channel:cast(Channel, #'basic.reject' { delivery_tag = Tag, requeue=true }),
-           {reply, State};
+           {noreply, State};
         remove ->
            exometer:update([CN, N, removals], 1),
            ok = amqp_channel:cast(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false}),
-           {reply, State};
+           {noreply, State};
         ok ->
            {noreply, State}
     end;
