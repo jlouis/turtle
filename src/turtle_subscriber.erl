@@ -134,7 +134,7 @@ format_amqp_msg(#amqp_msg { payload = Payload, props = Props }) ->
     Pl = case byte_size(Payload) of
         K when K < 64 -> Payload;
         _ ->
-            <<Cut:64, _/binary>> = Payload,
+            <<Cut:64/binary, _/binary>> = Payload,
             Cut
     end,
     {Pl, Props}.
