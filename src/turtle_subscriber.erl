@@ -90,6 +90,14 @@ handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
              turtle_time:convert_time_unit(E-S, native, milli_seconds)),
            ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag }),
            {noreply, State#state { invoke_state = IState2 }};
+        reject ->
+           exometer:update([CN, N, rejects], 1),
+           ok = amqp_channel:cast(Channel, #'basic.reject' { delivery_tag = Tag, requeue=true }),
+           {reply, State};
+        remove ->
+           exometer:update([CN, N, removals], 1),
+           ok = amqp_channel:cast(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false}),
+           {reply, State};
         ok ->
            {noreply, State}
     end;
@@ -113,11 +121,13 @@ handle_message(Fun, Key,
 	    props = #'P_basic' { content_type = Type }} = M, IState) ->
     try Fun(Key, Type, Payload, IState) of
         ack -> {ack, IState};
-        {ack, IState2} -> {ack, IState2}
+        {ack, IState2} -> {ack, IState2};
+        reject -> reject;
+        remove -> remove
     catch
         Class:Error ->
             lager:warning("Cannot handle message ~p: ~p:~p", [format_amqp_msg(M), Class, Error]),
-            ok
+            reject
     end.
     
 format_amqp_msg(#amqp_msg { payload = Payload, props = Props }) ->
