@@ -126,15 +126,15 @@ handle_message(Fun, Key,
         remove -> remove
     catch
         Class:Error ->
-            lager:warning("Cannot handle message ~p: ~p:~p", [format_amqp_msg(M), Class, Error]),
+            lager:warning("Cannot handle message ~p: ~p:~p (BT: ~p)", [format_amqp_msg(M), Class, Error, erlang:get_stacktrace()]),
             remove
     end.
     
 format_amqp_msg(#amqp_msg { payload = Payload, props = Props }) ->
     Pl = case byte_size(Payload) of
-        K when K < 128 -> Payload;
+        K when K < 64 -> Payload;
         _ ->
-            <<Cut:128, _/binary>> = Payload,
+            <<Cut:64, _/binary>> = Payload,
             Cut
     end,
     {Pl, Props}.
