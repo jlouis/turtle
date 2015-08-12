@@ -49,14 +49,14 @@ init([#{
         consume_queue := Queue,
         function := Fun,
         connection := ConnName,
-        name := Name }]) ->
+        name := Name } = Conf]) ->
     {ok, Tag} = turtle:consume(Channel, Queue),
     ok = exometer:ensure([ConnName, Name, msgs], spiral, []),
     ok = exometer:ensure([ConnName, Name, latency], histogram, []),
     {ok, #state {
         consumer_tag = Tag, 
         invoke = Fun,
-        invoke_state = init,
+        invoke_state = invoke_state(Conf),
         channel = Channel,
         conn_name = ConnName,
         name = Name }}.
@@ -138,3 +138,7 @@ format_amqp_msg(#amqp_msg { payload = Payload, props = Props }) ->
             Cut
     end,
     {Pl, Props}.
+
+%% Compute the initial state of the function
+invoke_state(#{ init_state := S }) -> S;
+invoke_state(_) -> init.
