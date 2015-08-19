@@ -1,6 +1,6 @@
 {application, 'turtle',
  [{description, "Turtle manages RabbitMQ connections"},
-  {vsn, "0.2.0"},
+  {vsn, "0.3.0"},
   {registered, []},
   {mod, {'turtle_app', []}},
   {applications,
@@ -15,8 +15,16 @@
     uuid
    ]},
   {env,[
-      {gproc_env_order, [os_env, app_env, error]},
-      {connection_config, [#{ conn_name => amqp_server }]}
+      {connection_config, [
+          #{
+            conn_name => amqp_server,
+            host => "localhost",
+            port => 5672,
+            username => "guest",
+            password => "guest",
+            
+            virtual_host => "/"
+           }]}
   ]},
   {modules, []}
  ]}.

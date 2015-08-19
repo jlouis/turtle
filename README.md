@@ -21,18 +21,30 @@ We don't want to write low-level RabbitMQ stuff in each and every application. H
 Turtle is configured with a set of connector descriptions of the form:
 
 	#{
-		conn_name := …,
+		conn_name => …,
 		
 		%% RabbitMQ connection parameters
-		username := …,
-		password := …,
-		host = …,
+		username => …,
+		password => …,
+		host => …,
 		%% Further RabbitMQ connection parameters
 	}
 
 This will configure a connection under the name `conn_name` with the given parameters. It is the intention that this configuration is static for the node onto which it is deployed. That is, the node should always maintain such a connection to a target.
 
-The configuration is passed as part of the `gproc` environment, which means one can override where configuration is in the system by the use of gproc.
+In order to support environment configuration of this particular thing you can write, e.g.,
+
+	#{
+		username => {env, "JUNGO_AMQP_USERNAME", "guest"},
+		…
+	}
+	
+which will configure the username to be picked up from the environment under the name
+of `JUNGO_AMQP_USERNAME` and if it is not present, it will pick `"guest"` as the username.
+
+The reason this is not automatically configured is that the configuration can be pretty
+complex and we probably want control in those situations over the name used in the
+environment.
 
 # Operation
 
