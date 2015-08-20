@@ -114,6 +114,9 @@ send_recv(_Config) ->
         ct:fail(subscription_timeout)
     end,
     
+    %% Wait a bit for stability of the underlying counts
+    ct:sleep(20),
+
     {ok, PVals} = exometer:get_value([amqp_server, local_publisher, casts]),
     1 = proplists:get_value(one, PVals),
     {ok, SVals} = exometer:get_value([amqp_server, local_service, msgs]),

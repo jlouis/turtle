@@ -29,14 +29,8 @@ conn_params(Ps) ->
     }.
 
 
-username(#{ username := U }) -> list_to_binary(env(U)).
-password(#{ password := PW }) -> list_to_binary(env(PW)).
-virtual_host(#{ virtual_host := VH }) -> list_to_binary(env(VH)).
-host(#{ host := H }) -> env(H).
-port(#{ port := P }) -> integerize(env(P)).
-
-integerize(I) when is_integer(I) -> I;
-integerize(Str) when is_list(Str) -> list_to_integer(Str).
-
-env({env, E, Default}) -> os:getenv(E, Default);
-env(Val) -> Val.
+username(#{ username := U }) -> list_to_binary(U).
+password(#{ password := PW }) -> list_to_binary(PW).
+virtual_host(#{ virtual_host := VH }) -> list_to_binary(VH).
+host(#{ host := H }) -> H.
+port(#{ port := P }) -> P.
