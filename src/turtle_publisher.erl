@@ -6,7 +6,7 @@
 
 %% Lifetime
 -export([
-	start_link/3
+	start_link/3, start_link/4
 ]).
 
 %% API
@@ -28,17 +28,41 @@
          conn_name,
          name,
 	channel,
-	conn_ref
+	conn_ref,
+	confirms,
+	unacked = gb_trees:empty()
  }).
+
+-define(DEFAULT_OPTIONS,
+    #{
+        delcarations => [],
+        confirms => false
+    }).
 
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
 
 %% @doc Start a new publication worker
-%% Provides an OTP gen_server for supervisor linkage
+%% Provides an OTP gen_server for supervisor linkage. The `Name' is the name of
+%% this publisher (which it registers itself in gproc as). The `Connection' is the turtle-name
+%% for the connection, i.e., `amqp_server'. Finally, `Declarations' is a declaration list to
+%% be executed against AMQP when setting up.
 %% @end
 start_link(Name, Connection, Declarations) ->
-    gen_server:start_link(?MODULE, [Name, Connection, Declarations], []).
+    Options = maps:merge(?DEFAULT_OPTIONS, #{ declarations => Declarations}),
+    gen_server:start_link(?MODULE, [Name, Connection, Options], []).
+
+%% @doc start_link/4 starts a publisher with options
+%% This variant of start_link takes an additional `Options' section which can be
+%% used to set certain publisher-specific options:
+%% <dl>
+%%   <dt>confirms</dt><dd>should be enable publisher confirms?</dd>
+%% </dl>
+%% @end
+start_link(Name, Connection, Declarations, Options) ->
+    Options = maps:merge(?DEFAULT_OPTIONS, Options),
+    gen_server:start_link(?MODULE,
+    	[Name, Connection, Options#{ delcarations => Declarations }]).
 
 %% @doc publish a message asynchronously to RabbitMQ
 %% The specification is that you have to provide all parameters, because experience
@@ -59,22 +83,33 @@ publish_sync(Publisher, Exch, Key, ContentType, Payload, Opts) ->
 %% -------------------------------------------------------------------
 
 %% @private
-init([Name, ConnName, Declarations]) ->
+init([Name, ConnName, Options]) ->
     %% Initialize the system in the {initializing,...} state and await the presence of
     %% a connection under the given name without blocking the process. We replace
     %% the state with a #state{} record once that happens (see handle_info/2)
     Ref = gproc:nb_wait({n,l,{turtle,connection,ConnName}}),
     ok = exometer:ensure([ConnName, Name, casts], spiral, []),
-    {ok, {initializing, Name, Ref, ConnName, Declarations}}.
+    {ok, {initializing, Name, Ref, ConnName, Options}}.
 
 %% @private
 handle_call(_Pub, _From, {initializing, _, _, _, _} = Init) ->
     {reply, {error, initializing}, Init};
-handle_call({publish, Pub, Props, Payload}, _From,
-	#state { channel = Ch, conn_name = ConnName, name = Name } = State) ->
-    ok = amqp_channel:cast(Ch, Pub, #amqp_msg { props = Props, payload = Payload }),
-    exometer:update([ConnName, Name, casts], 1),
-    {reply, ok, State};
+handle_call({publish, Pub, Props, Payload}, From,
+	#state {
+	    channel = Ch,
+	    confirms = Confirm,
+	    conn_name = ConnName,
+	    name = Name } = InState) ->
+
+    {ok, State} = 
+        publish({call, From}, Ch, Pub, #amqp_msg { props = Props, payload = Payload },
+            InState),
+    exometer:update([ConnName, Name, calls], 1),
+
+    case Confirm of
+        true -> {noreply, State};
+        false -> {reply, ok, State}
+    end;
 handle_call(Call, From, State) ->
     lager:warning("Unknown call from ~p: ~p", [From, Call]),
     {reply, {error, unknown_call}, State}.
@@ -86,8 +121,9 @@ handle_cast(Pub, {initializing, _, _, _, _} = Init) ->
     lager:warning("Publish while initializing: ~p", [Pub]),
     {noreply, Init};
 handle_cast({publish, Pub, Props, Payload},
-	#state { channel = Ch, conn_name = ConnName, name = Name } = State) ->
-    ok = amqp_channel:cast(Ch, Pub, #amqp_msg { props = Props, payload = Payload }),
+	#state { channel = Ch, conn_name = ConnName, name = Name } = InState) ->
+    {ok, State} = publish({cast, undefined}, Ch, Pub, #amqp_msg { props = Props, payload = Payload },
+        InState),
     exometer:update([ConnName, Name, casts], 1),
     {noreply, State};
 handle_cast(Cast, State) ->
@@ -95,9 +131,26 @@ handle_cast(Cast, State) ->
     {noreply, State}.
 
 %% @private
-handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, N, Ref, CName, Decls}) ->
+handle_info(#'basic.ack' { delivery_tag = Seq, multiple = Multiple},
+	#state { confirms = true } = State) ->
+    {ok, State} = confirm(ack, Seq, Multiple, State),
+    {noreply, State};
+handle_info(#'basic.nack' { delivery_tag = Seq, multiple = Multiple },
+	#state { confirms = true } = State) ->
+    {ok, State} = confirm(nack, Seq, Multiple, State),
+    {noreply, State};
+handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, N, Ref, CName, Options}) ->
     {ok, Channel} = turtle:open_channel(CName),
+    #{ declarations := Decls, confirms := Confirms} = Options,
     ok = turtle:declare(Channel, Decls),
+    case Confirms of
+        true ->
+            #'confirm.select_ok' {} =
+                amqp_channel:call(Channel, #'confirm.select'{}),
+                ok = amqp_channel:register_confirm_handler(Channel, self());
+        false ->
+            ok
+    end,
     MRef = erlang:monitor(process, Pid),
     reg(N),
     {noreply,
@@ -105,6 +158,7 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, N, Ref, CName,
         channel = Channel,
         conn_ref = MRef,
         conn_name = CName,
+        confirms = Confirms,
         name = N}};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
     {stop, {error, {connection_down, Reason}}, State};
@@ -141,3 +195,43 @@ mk_publish(Exch, Key, ContentType, Payload, Opts) ->
     Props = properties(ContentType, Opts),
     {publish, Pub, Props, Payload}.
 
+%% Perform the AMQP publication and track confirms
+publish({cast, undefined}, Ch, Pub, Props, #state{ confirms = true } = State) ->
+   _Seq = amqp_channel:next_publish_seqno(Ch),
+   ok = amqp_channel:cast(Ch, Pub, Props),
+    {ok, State};
+publish({call, From}, Ch, Pub, Props, #state{ confirms = true, unacked = UA } = State) ->
+   Seq = amqp_channel:next_publish_seqno(Ch),
+   ok = amqp_channel:call(Ch, Pub, Props),
+   T = turtle_time:monotonic_time(),
+   {ok, State#state{ unacked = gb_trees:insert(Seq, {From, T}, UA) }};
+publish({F, _X}, Ch, Pub, Props, #state{ confirms = false } = State) ->
+   ok = amqp_channel:F(Ch, Pub, Props),
+   {ok, State}.
+    
+confirm(Reply, Seq, Multiple, #state { unacked = UA } = State) ->
+    T2 = turtle_time:monotonic_time(),
+    {Results, UA1} = remove_delivery_tags(Seq, Multiple, UA),
+    [rep(Reply, From, T1, T2) || {From, T1} <- Results],
+    {ok, State#state { unacked = UA1 }}.
+
+remove_delivery_tags(Seq, false, Unacked) ->
+    X = gb_trees:get(Seq, Unacked),
+    {ok, [X], gb_trees:delete(Seq, Unacked)};
+remove_delivery_tags(Seq, true, Unacked) ->
+    case gb_trees:is_empty(Unacked) of
+        true -> {ok, [], Unacked};
+        false ->
+            {Smallest, X, UA1} = gb_trees:take_smallest(Unacked),
+            case Smallest > Seq of
+                true ->
+                    {ok, [], Unacked};
+                false ->
+                    {ok, Xs, FinalUA} = remove_delivery_tags(Seq, true, UA1),
+                    {ok, [X | Xs], FinalUA}
+            end
+    end.
+
+rep(Reply, From, T1, T2) ->
+    Window = turtle_time:convert_time_unit(T2 - T1, native, milli_seconds),
+    gen_server:reply(From, {Reply, Window}).
