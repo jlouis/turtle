@@ -35,7 +35,7 @@
 
 -define(DEFAULT_OPTIONS,
     #{
-        delcarations => [],
+        declarations => [],
         confirms => false
     }).
 
@@ -59,10 +59,11 @@ start_link(Name, Connection, Declarations) ->
 %%   <dt>confirms</dt><dd>should be enable publisher confirms?</dd>
 %% </dl>
 %% @end
-start_link(Name, Connection, Declarations, Options) ->
-    Options = maps:merge(?DEFAULT_OPTIONS, Options),
+start_link(Name, Connection, Declarations, InOptions) ->
+    Options = maps:merge(?DEFAULT_OPTIONS, InOptions),
+    lager:info("Options: ~p", [Options]),
     gen_server:start_link(?MODULE,
-    	[Name, Connection, Options#{ delcarations => Declarations }]).
+    	[Name, Connection, Options#{ declarations := Declarations }], []).
 
 %% @doc publish a message asynchronously to RabbitMQ
 %% The specification is that you have to provide all parameters, because experience
@@ -132,8 +133,8 @@ handle_cast(Cast, State) ->
 
 %% @private
 handle_info(#'basic.ack' { delivery_tag = Seq, multiple = Multiple},
-	#state { confirms = true } = State) ->
-    {ok, State} = confirm(ack, Seq, Multiple, State),
+	#state { confirms = true } = InState) ->
+    {ok, State} = confirm(ack, Seq, Multiple, InState),
     {noreply, State};
 handle_info(#'basic.nack' { delivery_tag = Seq, multiple = Multiple },
 	#state { confirms = true } = State) ->
@@ -217,18 +218,18 @@ confirm(Reply, Seq, Multiple, #state { unacked = UA } = State) ->
 
 remove_delivery_tags(Seq, false, Unacked) ->
     X = gb_trees:get(Seq, Unacked),
-    {ok, [X], gb_trees:delete(Seq, Unacked)};
+    {[X], gb_trees:delete(Seq, Unacked)};
 remove_delivery_tags(Seq, true, Unacked) ->
     case gb_trees:is_empty(Unacked) of
-        true -> {ok, [], Unacked};
+        true -> {[], Unacked};
         false ->
             {Smallest, X, UA1} = gb_trees:take_smallest(Unacked),
             case Smallest > Seq of
                 true ->
-                    {ok, [], Unacked};
+                    {[], Unacked};
                 false ->
-                    {ok, Xs, FinalUA} = remove_delivery_tags(Seq, true, UA1),
-                    {ok, [X | Xs], FinalUA}
+                    {Xs, FinalUA} = remove_delivery_tags(Seq, true, UA1),
+                    {[X | Xs], FinalUA}
             end
     end.
 
