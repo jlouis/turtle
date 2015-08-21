@@ -20,6 +20,7 @@
 	declare/2,
 	open_channel/1,
 	publish/5, publish/6,
+	publish_sync/5, publish_sync/6,
 	consume/2
 ]).
 
@@ -58,6 +59,10 @@ declare(Channel, [#'queue.bind' {} = Queue | Ds]) ->
 publish(Pub, X, Key, CType, Payload) ->
     publish(Pub, X, Key, CType, Payload, #{ delivery_mode => ephermeral }).
 
+%% @equiv publish_sync(Name, Exch, Key, ContentType, Payload, #{ delivery_mode => ephermeral })
+publish_sync(Pub, X, Key, CType, Payload) ->
+    publish_sync(Pub, X, Key, CType, Payload, #{ delivery_mode => ephermeral }).
+
 %% @doc publish(Name, Exch, Key, ContentType, Payload, Opts) publishes messages.
 %%
 %% This publication variant requires you to have started a publisher already through
@@ -74,6 +79,15 @@ publish(Pub, X, Key, CType, Payload) ->
 %% @end
 publish(Pub, X, Key, CType, Payload, Opts) ->
     turtle_publisher:publish(Pub, X, Key, CType, Payload, Opts).
+
+%% @doc publish_sync/6 publishes messages synchronously
+%% This variant of publish, will publish the message synchronously to the broker, and
+%% wait for the best effort of delivery guarantee. Without publisher confirms, this is the
+%% point where the message is delivered to the TCP network stack. With confirms, the
+%% call will block until the Broker either acks or nacks it.
+%% @end
+publish_sync(Pub, X, Key, CType, Payload, Opts) ->
+    turtle_publisher:publish_sync(Pub, X, Key, CType, Payload, Opts).
 
 %% @doc consume/2 starts consumption on a channel with default parameters
 %% @end

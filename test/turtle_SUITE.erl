@@ -107,8 +107,17 @@ send_recv(_Config) ->
 
     ct:log("Publish a message on the channel"),
     turtle:publish(local_publisher, X, Q, <<"text/plain">>, <<"The turtle and the hare">>),
+    ok = turtle:publish_sync(local_publisher, X, Q, <<"text/plain">>, <<"The hare and the turtle">>),
+
     receive
         {Q, <<"text/plain">>, <<"The turtle and the hare">>} ->
+            ok
+    after 400 ->
+        ct:fail(subscription_timeout)
+    end,
+
+    receive
+        {Q, <<"text/plain">>, <<"The hare and the turtle">>} ->
             ok
     after 400 ->
         ct:fail(subscription_timeout)
@@ -121,7 +130,7 @@ send_recv(_Config) ->
     1 = proplists:get_value(one, PVals),
     {ok, SVals} = exometer:get_value([amqp_server, local_service, msgs]),
     ct:log("Latency structure: ~p", [SVals]),
-    1 = proplists:get_value(one, SVals),
+    2 = proplists:get_value(one, SVals),
     {ok, _SLvals} = exometer:get_value([amqp_server, local_service, latency]),
     ok.
 
