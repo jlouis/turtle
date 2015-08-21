@@ -11,7 +11,8 @@
 
 %% API
 -export([
-	publish/6
+	publish/6,
+	publish_sync/6
 ]).
 
 -export([
@@ -45,14 +46,15 @@ start_link(Name, Connection, Declarations) ->
 %% Hence we provide the full kind of messaging, rather than a subset
 %% @end
 publish(Publisher, Exch, Key, ContentType, Payload, Opts) ->
-    Pub = #'basic.publish' {
-        exchange = Exch,
-        routing_key = Key
-    },
-    Props = properties(ContentType, Opts),
+    Pub = mk_publish(Exch, Key, ContentType, Payload, Opts),
     Pid = gproc:where({n,l,{turtle,publisher,Publisher}}),
-    gen_server:cast(Pid, {publish, Pub, Props, Payload}).
+    gen_server:cast(Pid, Pub).
 
+publish_sync(Publisher, Exch, Key, ContentType, Payload, Opts) ->
+    Pub = mk_publish(Exch, Key, ContentType, Payload, Opts),
+    Pid = gproc:where({n,l,{turtle,publisher,Publisher}}),
+    gen_server:call(Pid, Pub).
+    
 %% CALLBACKS
 %% -------------------------------------------------------------------
 
@@ -66,6 +68,13 @@ init([Name, ConnName, Declarations]) ->
     {ok, {initializing, Name, Ref, ConnName, Declarations}}.
 
 %% @private
+handle_call(_Pub, _From, {initializing, _, _, _, _} = Init) ->
+    {reply, {error, initializing}, Init};
+handle_call({publish, Pub, Props, Payload}, _From,
+	#state { channel = Ch, conn_name = ConnName, name = Name } = State) ->
+    ok = amqp_channel:cast(Ch, Pub, #amqp_msg { props = Props, payload = Payload }),
+    exometer:update([ConnName, Name, casts], 1),
+    {reply, ok, State};
 handle_call(Call, From, State) ->
     lager:warning("Unknown call from ~p: ~p", [From, Call]),
     {reply, {error, unknown_call}, State}.
@@ -122,3 +131,13 @@ properties(ContentType, #{ delivery_mode := persistent }) ->
     #'P_basic' { content_type = ContentType, delivery_mode = 2 };
 properties(ContentType, #{ delivery_mode := ephermeral }) ->
     #'P_basic' { content_type = ContentType }.
+
+%% Create a new publish package
+mk_publish(Exch, Key, ContentType, Payload, Opts) ->
+    Pub = #'basic.publish' {
+        exchange = Exch,
+        routing_key = Key
+    },
+    Props = properties(ContentType, Opts),
+    {publish, Pub, Props, Payload}.
+
