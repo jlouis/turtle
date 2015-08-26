@@ -48,6 +48,7 @@ lifetime_group() ->
 basic_group() ->
    [{basic, [], [
        send_recv,
+       send_recv_confirm,
        kill_publisher,
        kill_service
    ]}].
@@ -69,6 +70,70 @@ start_stop(_Config) ->
     {ok, _Apps} = application:ensure_all_started(turtle),
     ct:sleep(200),
     ok = application:stop(turtle).
+send_recv_confirm(_Config) ->
+    CastsB = get_casts(),
+    MsgsB = get_msgs(),
+    X = <<"send_recv_exchange_c">>,
+    Q = <<"send_recv_queue_c">>,
+
+    ct:log("Add a subscriber service, consuming on Q"),
+    Self = self(),
+    F = fun(Key, ContentType, Payload, _State) ->
+        Self ! {Key, ContentType, Payload},
+        ack
+    end,
+    {ok, _ServicePid} = turtle_service:start_link(
+        #{
+            name => local_service,
+            connection => amqp_server,
+            function => F,
+            declarations =>
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q, durable = true },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
+            subscriber_count => 3,
+            prefetch_count => 10,
+            consume_queue => Q
+        }),
+
+    ct:log("Start a new publisher process"),
+    {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q, durable = true },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
+                #{ confirms => true} ),
+
+    ct:log("Await the start of the publisher"),
+    gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
+    ct:log("Await the start of the service"),
+    gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+
+    ct:log("Publish a message on the channel"),
+    turtle:publish(local_publisher, X, Q, <<"text/plain">>, <<"The turtle and the hare">>),
+    {ack, _Time} = turtle:publish_sync(local_publisher, X, Q, <<"text/plain">>, <<"The hare and the turtle">>),
+
+    receive
+        {Q, <<"text/plain">>, <<"The turtle and the hare">>} ->
+            ok
+    after 400 ->
+        ct:fail(subscription_timeout)
+    end,
+
+    receive
+        {Q, <<"text/plain">>, <<"The hare and the turtle">>} ->
+            ok
+    after 400 ->
+        ct:fail(subscription_timeout)
+    end,
+    
+    %% Wait a bit for stability of the underlying counts
+    ct:sleep(20),
+
+    CastsA = get_casts(),
+    1 = CastsA - CastsB,
+    MsgsA = get_msgs(),
+    2 = MsgsA - MsgsB,
+    ok.
 
 send_recv(_Config) ->
     X = <<"send_recv_exchange">>,
@@ -163,7 +228,7 @@ kill_service(_Config) ->
     ct:log("Flush the queue"),
     flush(),
     ct:log("Kill the connection, check that the service goes away"),
-    ConnPid = gproc:where({n,l,{turtle,connection, amqp_server}}),
+    _ConnPid = gproc:where({n,l,{turtle,connection, amqp_server}}),
     ChanPid = gproc:where({n,l,{turtle,service_channel,local_service}}),
     MRef = erlang:monitor(process, ChanPid),
     true = (ChanPid /= undefined),
@@ -196,7 +261,7 @@ kill_service(_Config) ->
     receive
         {Q, <<"text/plain">>, M} ->
             ok;
-        {Q, <<"text/plain">>, M2} ->
+        {Q, <<"text/plain">>, _M2} ->
             ct:log("Received other message"),
             ok;
         Msg2 ->
@@ -222,7 +287,7 @@ kill_publisher(_Config) ->
 
     ct:log("Kill the connection, check that the publisher goes away"),
     process_flag(trap_exit, true),
-    ConnPid = gproc:where({n,l,{turtle,connection,amqp_server}}),
+    _ConnPid = gproc:where({n,l,{turtle,connection,amqp_server}}),
     PublisherPid = gproc:where({n,l,{turtle,publisher,local_publisher}}),
     turtle_conn:close(amqp_server),
     receive
@@ -245,3 +310,13 @@ flush() ->
     after 30 ->
        ok
     end.
+
+%% Obtain different exometer statistics.
+get_casts() ->
+    {ok, PVals} = exometer:get_value([amqp_server, local_publisher, casts]),
+    proplists:get_value(one, PVals).
+
+get_msgs() ->    
+    {ok, SVals} = exometer:get_value([amqp_server, local_service, msgs]),
+    proplists:get_value(one, SVals).
+

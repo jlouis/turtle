@@ -42,5 +42,5 @@ configure_connectors() ->
 
 conn_sup(#{ conn_name := Name } = Ps) ->
     {Name,
-        {turtle_conn, start_link, [Name, turtle_config:conn_params(Ps)]},
+        {turtle_conn, start_link, [Name, Ps]},
         permanent, infinity, supervisor, [turtle_conn_sup]}.
