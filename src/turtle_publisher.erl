@@ -217,8 +217,13 @@ confirm(Reply, Seq, Multiple, #state { unacked = UA } = State) ->
     {ok, State#state { unacked = UA1 }}.
 
 remove_delivery_tags(Seq, false, Unacked) ->
-    X = gb_trees:get(Seq, Unacked),
-    {[X], gb_trees:delete(Seq, Unacked)};
+    case gb_trees:lookup(Seq, Unacked) of
+        {value, X} -> {[X], gb_trees:delete(Seq, Unacked)};
+        none ->
+            %% This can happen if for instance we have casted a message. That
+            %% Particular SeqNo is not present among the unacked messages
+            {[], Unacked}
+    end;
 remove_delivery_tags(Seq, true, Unacked) ->
     case gb_trees:is_empty(Unacked) of
         true -> {[], Unacked};
