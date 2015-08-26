@@ -33,14 +33,26 @@
 ]).
 
 -define(DEFAULT_RETRY_TIME, 15*1000).
+-define(DEFAULT_ATTEMPT_COUNT, 10).
+
+-type network_connection() :: {string(), inet:port_number()}.
+
+-record(conn_group, {
+    orig :: [{atom(), [network_connection()]}],
+    orig_group :: [network_connection()],
+    attempts = ?DEFAULT_ATTEMPT_COUNT :: non_neg_integer(),
+    next
+}).
 
 -record(state, {
 	name :: atom(),
 	network_params :: #amqp_params_network{},
+	cg :: #conn_group{},
 	connection = undefined :: undefined | pid(),
 	retry_time = ?DEFAULT_RETRY_TIME :: pos_integer(),
 	conn_ref = undefined :: undefined | reference()
 }).
+
 
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
@@ -65,7 +77,8 @@ init([Name, Configuration]) ->
     self() ! connect,
     {ok, #state {
          name = Name,
-    	network_params = Configuration
+         cg = group_init(Configuration),
+    	network_params = turtle_config:conn_params(Configuration)
     }}.
 
 %% @private
@@ -92,23 +105,25 @@ handle_info({'DOWN', MRef, process, _, Reason},
     lager:warning("Lost connection to AMQP for conn_name = ~p", [Name]),
     {stop, {error, {connection_down, Reason}}, State};
 handle_info(connect,
-	#state { name = Name, network_params = NP, retry_time = Retry } = State) ->
+	#state { name = Name, retry_time = Retry } = State) ->
     case connect(State) of
         {ok, ConnectedState} ->
             reg(Name),
             {noreply, ConnectedState};
-        {error, unknown_host} ->
-            lager:error("Unknown host while connecting to RabbitMQ: ~p", [NP]),
-            {stop, {error, unknown_host}, State};
-        {error,econnrefused} ->
-            lager:info("AMQP Connection refused, retrying"),
+        {error, unknown_host, #state { cg = CG } = NextState} ->
+            lager:error("Unknown host while connecting to RabbitMQ: ~p",
+                [group_report(CG)]),
+            {stop, {error, unknown_host}, NextState};
+        {error,econnrefused, #state { cg = CG } = NextState} ->
+            lager:info("AMQP Connection refused, retrying in ~Bs: ~p",
+                [Retry div 1000, group_report(CG)]),
             erlang:send_after(Retry, self(), connect),
-            {noreply, State};
-        {error, timeout} ->
+            {noreply, NextState};
+        {error, timeout, #state { cg = CG } = NextState} ->
             lager:warning("Timeout while connecting to RabbitMQ, retrying in ~Bs: ~p",
-                [Retry div 1000, NP]),
+                [Retry div 1000, group_report(CG)]),
             erlang:send_after(Retry, self(), connect),
-            {noreply, State}
+            {noreply, NextState}
     end;
 handle_info(_, State) ->
     {noreply, State}.
@@ -124,14 +139,48 @@ code_change(_, State, _) ->
 %%
 %% INTERNAL FUNCTIONS
 %%
-connect(#state { network_params = NP } = State) ->
-    case amqp_connection:start(NP) of
+connect(#state { network_params = NP, cg = CG } = State) ->
+    {ok, _N, {Host, Port}, CG2} = group_next(CG),
+    Network = NP#amqp_params_network {
+    	host = Host,
+    	port = Port
+    },
+    case amqp_connection:start(Network) of
        {ok, Conn} ->
            MRef = erlang:monitor(process, Conn),
-           {ok, State#state { conn_ref = MRef, connection = Conn }};
-       {error, Reason} -> {error, Reason}
+           {ok, State#state { conn_ref = MRef, connection = Conn, cg = CG2 }};
+       {error, Reason} -> {error, Reason, State#state { cg = CG2} }
     end.
 
 reg(Name) ->
     true = gproc:reg({n,l, {turtle, connection, Name}}).
 
+%%
+%% Connection retry handling
+%%
+group_next(#conn_group { orig = [] }) ->
+    {error, no_connection_groups_defined};
+group_next(#conn_group { orig = [{_N, G} | _] = Orig, next = [] } = CG) ->
+    group_next(CG#conn_group {
+        orig_group = G,
+        attempts = ?DEFAULT_ATTEMPT_COUNT,
+        next = Orig });
+group_next(#conn_group { orig_group = G, next = [{N, []} | Cns] } = CG) ->
+    group_next(CG#conn_group { next = [{N, G} | Cns] });
+group_next(#conn_group { attempts = 0, next = Next } = CG) ->
+    case Next of
+        [_] -> group_next(CG#conn_group { next = [] });
+        [_, {N, G} | Ns] ->
+            group_next(CG#conn_group {
+                orig_group = G,
+                attempts = ?DEFAULT_ATTEMPT_COUNT,
+                next = [{N, G} | Ns] })
+    end;
+group_next(#conn_group { attempts = A, next = [{N, [C|Cs]} | Ns] } = CG) ->
+    {ok, N, C, CG#conn_group { attempts = A - 1, next = [{N, Cs} | Ns] }}.
+
+group_report(#conn_group { attempts = A, next = [{Nm, _} | _] = Next }) ->
+    [{cursor, Nm}, {attempts, A}, {can_continue, [N || {N, _} <- Next] }].
+
+group_init(#{ connections := Cs }) ->
+    #conn_group { orig = Cs, attempts = ?DEFAULT_ATTEMPT_COUNT, next = [] }.
