@@ -101,6 +101,14 @@ handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
         ok ->
            {noreply, State}
     end;
+handle_info(Info, #state { invoke = Fun, invoke_state = IState } = State) ->
+    case Fun({info, Info}, IState) of
+        {ok, IState2} ->
+            {noreply, State#state { invoke_state = IState2 }};
+        {unknown, IState2} ->
+            lager:warning("Unknown info message: ~p", [Info]),
+            {noreply, State#state { invoke_state = IState2 }}
+    end;
 handle_info(_, State) ->
     {noreply, State}.
 
