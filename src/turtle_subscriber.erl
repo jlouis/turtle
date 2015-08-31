@@ -31,6 +31,7 @@
 	name,
 	invoke,
 	invoke_state = init,
+	handle_info = undefined,
 	channel,
 	consumer_tag
  }).
@@ -57,6 +58,7 @@ init([#{
         consumer_tag = Tag, 
         invoke = Fun,
         invoke_state = invoke_state(Conf),
+        handle_info = handle_info(Conf),
         channel = Channel,
         conn_name = ConnName,
         name = Name }}.
@@ -101,16 +103,12 @@ handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
         ok ->
            {noreply, State}
     end;
-handle_info(Info, #state { invoke = Fun, invoke_state = IState } = State) ->
-    case Fun({info, Info}, IState) of
-        {ok, IState2} ->
-            {noreply, State#state { invoke_state = IState2 }};
-        {unknown, IState2} ->
-            lager:warning("Unknown info message: ~p", [Info]),
-            {noreply, State#state { invoke_state = IState2 }}
-    end;
-handle_info(_, State) ->
-    {noreply, State}.
+handle_info(Info, #state { handle_info = undefined } = State) ->
+    lager:warning("Unknown info message: ~p", [Info]),
+    {noreply, State};
+handle_info(Info, #state { handle_info = HandleInfo, invoke_state = IState } = State) ->
+    {ok, IState2} = HandleInfo(Info, IState),
+    {noreply, State#state { invoke_state = IState2 }}.
 
 %% @private
 terminate(_Reason, _State) ->
@@ -151,3 +149,6 @@ format_amqp_msg(#amqp_msg { payload = Payload, props = Props }) ->
 %% Compute the initial state of the function
 invoke_state(#{ init_state := S }) -> S;
 invoke_state(_) -> init.
+
+handle_info(#{ handle_info := Handler }) -> Handler;
+handle_info(_) -> undefined.
