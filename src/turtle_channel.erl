@@ -42,6 +42,7 @@ start_link(Configuration) ->
 init([#{ connection := ConnName } = Conf]) ->
     ok = validate_config(Conf),
     Ref = gproc:nb_wait({n,l,{turtle, connection, ConnName}}),
+    process_flag(trap_exit, true),
     {ok, {initializing, Ref, Conf}}.
 
 %% @private

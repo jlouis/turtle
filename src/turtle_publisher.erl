@@ -90,6 +90,7 @@ init([Name, ConnName, Options]) ->
     %% the state with a #state{} record once that happens (see handle_info/2)
     Ref = gproc:nb_wait({n,l,{turtle,connection,ConnName}}),
     ok = exometer:ensure([ConnName, Name, casts], spiral, []),
+    process_flag(trap_exit, true),
     {ok, {initializing, Name, Ref, ConnName, Options}}.
 
 %% @private
