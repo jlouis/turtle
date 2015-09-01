@@ -168,6 +168,9 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 %% @private
+terminate(_Reason, #state { channel = Channel, }) when is_pid(Channel) ->
+    ok = amqp_channel:unregister_confirm_handler(Channel),
+    ok;
 terminate(_Reason, _State) ->
     ok.
 
