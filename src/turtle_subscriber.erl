@@ -84,7 +84,7 @@ handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
 	  invoke = Fun, invoke_state = IState,
 	  channel = Channel, conn_name = CN, name = N } = State) ->
     S = turtle_time:monotonic_time(),
-    case handle_message(Fun, Key, Content, IState) of
+    case handle_message(Fun, Key, Content, IState, Channel) of
         {ack, IState2} ->
            E = turtle_time:monotonic_time(),
            exometer:update([CN, N, msgs], 1),
@@ -124,10 +124,19 @@ code_change(_, State, _) ->
 handle_message(Fun, Key,
 	#amqp_msg {
 	    payload = Payload,
-	    props = #'P_basic' { content_type = Type }} = M, IState) ->
+	    props = #'P_basic' {
+	        content_type = Type,
+	        correlation_id = CorrID,
+	        reply_to = ReplyTo }} = M, IState, Channel) ->
     try Fun(Key, Type, Payload, IState) of
         ack -> {ack, IState};
         {ack, IState2} -> {ack, IState2};
+        {reply, CType, Msg} ->
+            reply(Channel, CorrID, ReplyTo, CType, Msg),
+            {ack, IState};
+        {reply, CType, Msg, IState2} ->
+            reply(Channel, CorrID, ReplyTo, CType, Msg),
+            {ack, IState2};
         reject -> reject;
         remove -> remove;
         ok -> ok
@@ -152,3 +161,15 @@ invoke_state(_) -> init.
 
 handle_info(#{ handle_info := Handler }) -> Handler;
 handle_info(_) -> undefined.
+
+reply(_Ch, _CorrID, undefined, _CType, _Msg) ->
+    lager:warning("Replying to target with no reply-to queue defined"),
+    ok;
+reply(Ch, CorrID, ReplyTo, CType, Msg) ->
+    Publish = #'basic.publish' {
+        exchange = <<"amq.direct">>,
+        routing_key = ReplyTo
+    },
+    Props = #'P_basic' { content_type = CType, correlation_id = CorrID },
+    AMQPMsg = #amqp_msg { props = Props, payload = Msg},
+    amqp_channel:cast(Ch, Publish, AMQPMsg).

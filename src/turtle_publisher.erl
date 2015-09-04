@@ -199,17 +199,17 @@ mk_publish(Exch, Key, ContentType, Payload, Opts) ->
     {publish, Pub, Props, Payload}.
 
 %% Perform the AMQP publication and track confirms
-publish({cast, undefined}, Ch, Pub, Props, #state{ confirms = true } = State) ->
+publish({cast, undefined}, Ch, Pub, AMQPMsg, #state{ confirms = true } = State) ->
    _Seq = amqp_channel:next_publish_seqno(Ch),
-   ok = amqp_channel:cast(Ch, Pub, Props),
+   ok = amqp_channel:cast(Ch, Pub, AMQPMsg),
     {ok, State};
-publish({call, From}, Ch, Pub, Props, #state{ confirms = true, unacked = UA } = State) ->
+publish({call, From}, Ch, Pub, AMQPMsg, #state{ confirms = true, unacked = UA } = State) ->
    Seq = amqp_channel:next_publish_seqno(Ch),
-   ok = amqp_channel:call(Ch, Pub, Props),
+   ok = amqp_channel:call(Ch, Pub, AMQPMsg),
    T = turtle_time:monotonic_time(),
    {ok, State#state{ unacked = gb_trees:insert(Seq, {From, T}, UA) }};
-publish({F, _X}, Ch, Pub, Props, #state{ confirms = false } = State) ->
-   ok = amqp_channel:F(Ch, Pub, Props),
+publish({F, _X}, Ch, Pub, AMQPMsg, #state{ confirms = false } = State) ->
+   ok = amqp_channel:F(Ch, Pub, AMQPMsg),
    {ok, State}.
     
 confirm(Reply, Seq, Multiple, #state { unacked = UA } = State) ->
