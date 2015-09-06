@@ -242,7 +242,7 @@ handle_deliver(Tag, #amqp_msg { payload = Payload, props = Props },
     ok = amqp_channel:cast(Ch, #'basic.ack' { delivery_tag = Tag }),
     case track_lookup(CorrID, IF) of
         {ok, Pid, T, IF2} ->
-            T2 = erlang:monotonic_time(),
+            T2 = turtle_time:monotonic_time(),
             Pid ! {rpc_reply, {self(), CorrID}, T2 - T, Type, Payload},
             {noreply, State#state { in_flight = IF2 }};
         not_found ->
@@ -360,7 +360,7 @@ reply_to_callers(T2, nack, [{rpc, From, _T, CorrID} | Callers]) ->
 
 track({Pid, _CallMonitor}, CorrID, Now, #track_db { monitors = Ms, live = Ls } = DB) ->
     MRef = monitor(process, Pid),
-    DB#track_db { monitors = Ms#{ MRef => CorrID }, live = Ls#{ CorrID => {Pid, MRef, Now}} }.
+    DB#track_db { monitors = maps:put(MRef, CorrID, Ms), live = maps:put(CorrID, {Pid, MRef, Now}, Ls) }.
 
 track_lookup(CorrID, #track_db { monitors = Ms, live = Ls }) ->
     case maps:get(CorrID, Ls, not_found) of
