@@ -1,5 +1,12 @@
 %%% @doc The publisher is a helper for publishing messages on a channel
 %%% @end
+%%
+%% TODO LIST:
+%% * Handle monitor 'DOWN' messages
+%% * Handle publisher-confirm path for RPC calls:
+%%		The client must cancel NACKs itself!
+%% * Handle the client path as well!
+
 -module(turtle_publisher).
 -behaviour(gen_server).
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -12,7 +19,9 @@
 %% API
 -export([
 	publish/6,
-	publish_sync/6
+	publish_sync/6,
+	rpc_call/6,
+	rpc_cancel/2
 ]).
 
 -export([
@@ -24,12 +33,21 @@
     code_change/3
 ]).
 
+-record(track_db, {
+	monitors = #{},
+	live = #{}
+}).
+
 -record(state, {
          conn_name,
          name,
 	channel,
 	conn_ref,
 	confirms,
+	reply_queue,
+	corr_id,
+	consumer_tag,
+	in_flight = #track_db{},
 	unacked = gb_trees:empty()
  }).
 
@@ -78,8 +96,17 @@ publish(Publisher, Exch, Key, ContentType, Payload, Opts) ->
 publish_sync(Publisher, Exch, Key, ContentType, Payload, Opts) ->
     Pub = mk_publish(Exch, Key, ContentType, Payload, Opts),
     Pid = gproc:where({n,l,{turtle,publisher,Publisher}}),
-    gen_server:call(Pid, Pub).
-    
+    gen_server:call(Pid, {call, Pub}).
+
+rpc_call(Publisher, Exch, Key, ContentType, Payload, Opts) ->
+    Pub = mk_publish(Exch, Key, ContentType, Payload, Opts),
+    Pid = gproc:where({n,l,{turtle,publisher,Publisher}}),
+    gen_server:call(Pid, {rpc_call, Pub}).
+
+rpc_cancel(Publisher, Opaque) ->
+    Pid = gproc:where({n,l,{turtle,publisher,Publisher}}),
+    gen_server:call(Pid, {rpc_cancel, Opaque}).
+
 %% CALLBACKS
 %% -------------------------------------------------------------------
 
@@ -95,22 +122,14 @@ init([Name, ConnName, Options]) ->
 %% @private
 handle_call(_Pub, _From, {initializing, _, _, _, _} = Init) ->
     {reply, {error, initializing}, Init};
-handle_call({publish, Pub, Props, Payload}, From,
-	#state {
-	    channel = Ch,
-	    confirms = Confirm,
-	    conn_name = ConnName,
-	    name = Name } = InState) ->
+handle_call({Kind, {publish, Pub, Props, Payload}}, From,
+	#state {conn_name = ConnName, name = Name } = InState) ->
 
-    {ok, State} = 
-        publish({call, From}, Ch, Pub, #amqp_msg { props = Props, payload = Payload },
-            InState),
-    exometer:update([ConnName, Name, calls], 1),
-
-    case Confirm of
-        true -> {noreply, State};
-        false -> {reply, ok, State}
-    end;
+    Res =  publish({Kind, From}, Pub, #amqp_msg { props = Props, payload = Payload }, InState),
+    exometer:update([ConnName, Name, Kind], 1),
+    Res;
+handle_call({rpc_cancel, {_Pid, CorrID}}, _From, #state { in_flight = IF } = State) ->
+    {reply, ok, State#state { in_flight = track_cancel(CorrID, IF) }};
 handle_call(Call, From, State) ->
     lager:warning("Unknown call from ~p: ~p", [From, Call]),
     {reply, {error, unknown_call}, State}.
@@ -122,11 +141,15 @@ handle_cast(Pub, {initializing, _, _, _, _} = Init) ->
     lager:warning("Publish while initializing: ~p", [Pub]),
     {noreply, Init};
 handle_cast({publish, Pub, Props, Payload},
-	#state { channel = Ch, conn_name = ConnName, name = Name } = InState) ->
-    {ok, State} = publish({cast, undefined}, Ch, Pub, #amqp_msg { props = Props, payload = Payload },
-        InState),
-    exometer:update([ConnName, Name, casts], 1),
-    {noreply, State};
+	#state { conn_name = ConnName, name = Name } = InState) ->
+    case publish({cast, undefined}, Pub, #amqp_msg { props = Props, payload = Payload }, InState) of
+        {noreply, State} ->
+            exometer:update([ConnName, Name, casts], 1),
+            {noreply, State};
+        {reply, _Rep, State} ->
+            exometer:update([ConnName, Name, casts], 1),
+            {noreply, State}
+    end;
 handle_cast(Cast, State) ->
     lager:warning("Unknown cast: ~p", [Cast]),
     {noreply, State}.
@@ -144,14 +167,9 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, N, Ref, CName,
     {ok, Channel} = turtle:open_channel(CName),
     #{ declarations := Decls, confirms := Confirms} = Options,
     ok = turtle:declare(Channel, Decls),
-    case Confirms of
-        true ->
-            #'confirm.select_ok' {} =
-                amqp_channel:call(Channel, #'confirm.select'{}),
-                ok = amqp_channel:register_confirm_handler(Channel, self());
-        false ->
-            ok
-    end,
+    ok = turtle:qos(Channel, Options),
+    ok = handle_confirms(Channel, Options),
+    {ok, ReplyQueue, Tag} = handle_rpc(Channel, Options),
     MRef = erlang:monitor(process, Pid),
     reg(N),
     {noreply,
@@ -160,9 +178,21 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, N, Ref, CName,
         conn_ref = MRef,
         conn_name = CName,
         confirms = Confirms,
+        corr_id = 0,
+        reply_queue = ReplyQueue,
+        consumer_tag = Tag,
         name = N}};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
     {stop, {error, {connection_down, Reason}}, State};
+handle_info({'DOWN', MRef, process, _, _Reason}, #state { in_flight = IF } = State) ->
+    {noreply, State#state { in_flight = track_cancel_monitor(MRef, IF) }};
+handle_info({#'basic.deliver' { delivery_tag = Tag}, Content}, State) ->
+    handle_deliver(Tag, Content, State);
+handle_info(#'basic.consume_ok'{}, State) ->
+    {noreply, State};
+handle_info(#'basic.cancel_ok'{}, State) ->
+    lager:info("Consumption canceled"),
+    {stop, normal, State};
 handle_info(Info, State) ->
     lager:warning("Received unknown info msg: ~p", [Info]),
     {noreply, State}.
@@ -183,6 +213,46 @@ code_change(_, State, _) ->
 reg(Name) ->
     true = gproc:reg({n,l,{turtle,publisher, Name}}).
 
+handle_confirms(Channel, #{ confirms := Confirms }) when Confirms == true; Confirms == enable ->
+     #'confirm.select_ok' {} = amqp_channel:call(Channel, #'confirm.select'{}),
+     ok = amqp_channel:register_confirm_handler(Channel, self());
+handle_confirms(_, _) -> ok.
+
+%% @doc handle_rpc/2 enables RPC on a publisher
+%% Different ways of enabling RPC on the connection. If given `enable' it just creates
+%% an anonymous queue. If given `{enable, Q}' It looks for that queue.
+%% @end
+handle_rpc(Channel, #{ rpc := {enable, Q}}) ->
+    #'queue.declare_ok' {} = amqp_channel:call(Channel,
+        #'queue.declare' { exclusive = true, auto_delete = true, durable = false, queue = Q }),
+    {ok, Tag} = turtle:consume(Channel, Q),
+    {ok, Q, Tag};
+handle_rpc(Channel, #{ rpc := enable }) ->
+    #'queue.declare_ok' { queue = Q } = amqp_channel:call(Channel,
+        #'queue.declare' { exclusive = true, auto_delete = true, durable = false }),
+    {ok, Tag} = turtle:consume(Channel, Q),
+    {ok, Q, Tag};
+handle_rpc(_, _) -> {ok, undefined, undefined}.
+
+%% @doc handle_deliver/3 handles delivery of responses from RPC calls
+%% @end
+handle_deliver(Tag, #amqp_msg { payload = Payload, props = Props },
+	#state { in_flight = IF, channel = Ch } = State) ->
+    #'P_basic' { content_type = Type, correlation_id = <<CorrID:64/integer>> } = Props,
+    ok = amqp_channel:cast(Ch, #'basic.ack' { delivery_tag = Tag }),
+    case track_lookup(CorrID, IF) of
+        {ok, Pid, T, IF2} ->
+            T2 = erlang:monotonic_time(),
+            Pid ! {rpc_reply, {self(), CorrID}, T2 - T, Type, Payload},
+            {noreply, State#state { in_flight = IF2 }};
+        not_found ->
+            exo_update(State, missed_rpcs, 1),
+            {noreply, State}
+    end.
+
+exo_update(#state { conn_name = ConnName, name = Name }, T, C) ->
+    exometer:update([ConnName, Name, T], C).
+
 %% Compute the properties of an AMQP message
 properties(ContentType, #{ delivery_mode := persistent }) ->
     #'P_basic' { content_type = ContentType, delivery_mode = 2 };
@@ -199,23 +269,56 @@ mk_publish(Exch, Key, ContentType, Payload, Opts) ->
     {publish, Pub, Props, Payload}.
 
 %% Perform the AMQP publication and track confirms
-publish({cast, undefined}, Ch, Pub, AMQPMsg, #state{ confirms = true } = State) ->
+publish({cast, undefined}, Pub, AMQPMsg, #state{ channel = Ch, confirms = true } = State) ->
    _Seq = amqp_channel:next_publish_seqno(Ch),
    ok = amqp_channel:cast(Ch, Pub, AMQPMsg),
-    {ok, State};
-publish({call, From}, Ch, Pub, AMQPMsg, #state{ confirms = true, unacked = UA } = State) ->
+    {noreply, State};
+publish({call, From}, Pub, AMQPMsg, #state{ channel = Ch,  confirms = true, unacked = UA } = State) ->
    Seq = amqp_channel:next_publish_seqno(Ch),
    ok = amqp_channel:call(Ch, Pub, AMQPMsg),
    T = turtle_time:monotonic_time(),
-   {ok, State#state{ unacked = gb_trees:insert(Seq, {From, T}, UA) }};
-publish({F, _X}, Ch, Pub, AMQPMsg, #state{ confirms = false } = State) ->
+   {noreply, State#state{ unacked = gb_trees:insert(Seq, {From, T}, UA) }};
+publish({rpc_call, From}, Pub, AMQPMsg,
+	#state {
+	    channel = Ch,
+	    confirms = true,
+	    unacked = UA,
+	    in_flight = IF,
+	    corr_id = CorrID,
+	    reply_queue = ReplyQ } = State) ->
+   Seq = amqp_channel:next_publish_seqno(Ch),
+   #amqp_msg { props = Props } = AMQPMsg,
+   WithReply = AMQPMsg#amqp_msg{ props = Props#'P_basic' {
+       reply_to = ReplyQ,
+       correlation_id = <<CorrID:64/integer>> }},
+   ok = amqp_channel:call(Ch, Pub, WithReply),
+   T = turtle_time:monotonic_time(),
+
+   {noreply, State#state {
+       corr_id = CorrID + 1,
+       unacked = gb_trees:insert(Seq, {rpc, From, T, CorrID}, UA),
+       in_flight = track(From, CorrID, T, IF) }};
+publish({rpc_call, From}, Pub, AMQPMsg,
+	#state { channel = Ch,  confirms = false, in_flight = IF, corr_id = CorrID, reply_queue = ReplyQ } = State) ->
+   #amqp_msg { props = Props } = AMQPMsg,
+   WithReply = AMQPMsg#amqp_msg{ props = Props#'P_basic' {
+       reply_to = ReplyQ,
+       correlation_id = <<CorrID:64/integer>> }},
+   ok = amqp_channel:call(Ch, Pub, WithReply),
+   T = turtle_time:monotonic_time(),
+
+   Opaque = {self(), CorrID},
+   {reply, {ok, Opaque}, State#state {
+       corr_id = CorrID + 1,
+       in_flight = track(From, CorrID, T, IF) }};
+publish({F, _X}, Pub, AMQPMsg, #state{ channel = Ch, confirms = false } = State) ->
    ok = amqp_channel:F(Ch, Pub, AMQPMsg),
-   {ok, State}.
-    
+   {reply, ok, State}.
+
 confirm(Reply, Seq, Multiple, #state { unacked = UA } = State) ->
     T2 = turtle_time:monotonic_time(),
     {Results, UA1} = remove_delivery_tags(Seq, Multiple, UA),
-    [rep(Reply, From, T1, T2) || {From, T1} <- Results],
+    reply_to_callers(T2, Reply, Results),
     {ok, State#state { unacked = UA1 }}.
 
 remove_delivery_tags(Seq, false, Unacked) ->
@@ -240,6 +343,45 @@ remove_delivery_tags(Seq, true, Unacked) ->
             end
     end.
 
-rep(Reply, From, T1, T2) ->
+reply_to_callers(_T2, _Reply, []) -> ok;
+reply_to_callers(T2, Reply, [{From, T1} | Callers]) ->
     Window = turtle_time:convert_time_unit(T2 - T1, native, milli_seconds),
-    gen_server:reply(From, {Reply, Window}).
+    gen_server:reply(From, {Reply, Window}),
+    reply_to_callers(T2, Reply, Callers);
+reply_to_callers(T2, ack, [{rpc, From, T1, CorrID} | Callers]) ->
+    Window = turtle_time:convert_time_unit(T2 - T1, native, milli_seconds),
+    Opaque = {self(), CorrID},
+    gen_server:reply(From, {ok, Opaque, Window}),
+    reply_to_callers(T2, ack, Callers);
+reply_to_callers(T2, nack, [{rpc, From, _T, CorrID} | Callers]) ->
+    Opaque = {self(), CorrID},
+    gen_server:reply(From, {error, {nack, Opaque}}),
+    reply_to_callers(T2, nack, Callers).
+
+track({Pid, _CallMonitor}, CorrID, Now, #track_db { monitors = Ms, live = Ls } = DB) ->
+    MRef = monitor(process, Pid),
+    DB#track_db { monitors = Ms#{ MRef => CorrID }, live = Ls#{ CorrID => {Pid, MRef, Now}} }.
+
+track_lookup(CorrID, #track_db { monitors = Ms, live = Ls }) ->
+    case maps:get(CorrID, Ls, not_found) of
+        {Pid, MRef, T} ->
+            demonitor(MRef, [flush]),
+            {ok, Pid, T, #track_db { monitors = maps:remove(MRef, Ms), live = maps:remove(CorrID, Ls) }};
+        not_found ->
+            not_found
+    end.
+
+track_cancel(CorrID, #track_db { monitors = Ms, live = Ls } = DB) ->
+    case maps:get(CorrID, Ls, not_found) of
+        not_found -> DB;
+        {_Pid, MRef, _T} ->
+            demonitor(MRef, [flush]),
+            DB#track_db { monitors = maps:remove(MRef, Ms), live = maps:remove(CorrID, Ls) }
+    end.
+
+track_cancel_monitor(MRef, #track_db { monitors = Ms, live = Ls } = DB) ->
+    case maps:get(MRef, Ms, not_found) of
+        not_found -> DB;
+        CorrID ->
+            DB#track_db { monitors = maps:remove(MRef, Ms), live = maps:remove(CorrID, Ls) }
+    end.

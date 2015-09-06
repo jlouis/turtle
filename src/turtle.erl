@@ -21,7 +21,8 @@
 	open_channel/1,
 	publish/5, publish/6,
 	publish_sync/5, publish_sync/6,
-	consume/2
+	consume/2,
+	qos/2
 ]).
 
 -type channel() :: pid().
@@ -96,3 +97,10 @@ consume(Channel, Queue) ->
    #'basic.consume_ok' { consumer_tag = Tag } =
        amqp_channel:call(Channel, Sub),
    {ok, Tag}.
+
+%% @doc qos/2 set QoS parameters on a queue according to configuration
+%% @end
+qos(Ch, #{ prefetch_count := K }) ->
+    #'basic.qos_ok'{} = amqp_channel:call(Ch, #'basic.qos' { prefetch_count = K }),
+    ok;
+qos(_Ch, _Conf) -> ok.
