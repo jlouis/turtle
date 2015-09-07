@@ -184,7 +184,7 @@ rpc(_Config) ->
     {ok, _, <<"text/plain">>, <<"Hello world! (2)">>} =
         turtle:rpc_sync(local_publisher, X, Q, <<"text/plain">>, <<"Hello world! (2)">>),
     
-    run_many_rpc(5, 10*1000),
+    run_many_rpc(5, 1000),
     ok.
 
 send_recv(_Config) ->
