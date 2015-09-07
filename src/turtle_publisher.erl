@@ -13,7 +13,7 @@
 
 %% Lifetime
 -export([
-	start_link/3, start_link/4
+	start_link/3, start_link/4, where/1
 ]).
 
 %% API
@@ -83,6 +83,11 @@ start_link(Name, Connection, Declarations, InOptions) ->
     gen_server:start_link(?MODULE,
     	[Name, Connection, Options#{ declarations := Declarations }], []).
 
+%% @doc where/1 returns what `Pid' a publisher is currently running under
+%% @end
+where(N) ->
+    gproc:where({n,l,{turtle,publisher,N}}).
+
 %% @doc publish a message asynchronously to RabbitMQ
 %% The specification is that you have to provide all parameters, because experience
 %% has shown that you end up having to tweak these things quite a lot in practice.
@@ -90,22 +95,18 @@ start_link(Name, Connection, Declarations, InOptions) ->
 %% @end
 publish(Publisher, Exch, Key, ContentType, Payload, Opts) ->
     Pub = mk_publish(Exch, Key, ContentType, Payload, Opts),
-    Pid = gproc:where({n,l,{turtle,publisher,Publisher}}),
-    gen_server:cast(Pid, Pub).
+    gen_server:cast(where(Publisher), Pub).
 
 publish_sync(Publisher, Exch, Key, ContentType, Payload, Opts) ->
     Pub = mk_publish(Exch, Key, ContentType, Payload, Opts),
-    Pid = gproc:where({n,l,{turtle,publisher,Publisher}}),
-    gen_server:call(Pid, {call, Pub}).
+    gen_server:call(where(Publisher), {call, Pub}).
 
 rpc_call(Publisher, Exch, Key, ContentType, Payload, Opts) ->
     Pub = mk_publish(Exch, Key, ContentType, Payload, Opts),
-    Pid = gproc:where({n,l,{turtle,publisher,Publisher}}),
-    gen_server:call(Pid, {rpc_call, Pub}).
+    gen_server:call(where(Publisher), {rpc_call, Pub}).
 
 rpc_cancel(Publisher, Opaque) ->
-    Pid = gproc:where({n,l,{turtle,publisher,Publisher}}),
-    gen_server:call(Pid, {rpc_cancel, Opaque}).
+    gen_server:call(where(Publisher), {rpc_cancel, Opaque}).
 
 %% CALLBACKS
 %% -------------------------------------------------------------------

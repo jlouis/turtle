@@ -99,7 +99,8 @@ rpc(Pub, X, Key, CType, Payload) ->
 %% @doc rpc_await/3 awaits the response of an opaque value
 %% @end
 rpc_await(Publisher, Opaque, Timeout) ->
-    MRef = monitor(process, Publisher),
+    Pid = turtle_publisher:where(Publisher),
+    MRef = monitor(process, Pid),
     case rpc_await_monitor(Opaque, Timeout, MRef) of
         {error, timeout} ->
             demonitor(MRef, [flush]),
