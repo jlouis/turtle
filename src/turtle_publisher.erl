@@ -214,7 +214,7 @@ code_change(_, State, _) ->
 reg(Name) ->
     true = gproc:reg({n,l,{turtle,publisher, Name}}).
 
-handle_confirms(Channel, #{ confirms := Confirms }) when Confirms == true; Confirms == enable ->
+handle_confirms(Channel, #{ confirms := true }) ->
      #'confirm.select_ok' {} = amqp_channel:call(Channel, #'confirm.select'{}),
      ok = amqp_channel:register_confirm_handler(Channel, self());
 handle_confirms(_, _) -> ok.
