@@ -66,11 +66,11 @@ declare(Channel, [#'queue.bind' {} = Queue | Ds]) ->
 
 %% @equiv publish(Name, Exch, Key, ContentType, Payload, #{})
 publish(Pub, X, Key, CType, Payload) ->
-    publish(Pub, X, Key, CType, Payload, #{ delivery_mode => ephermeral }).
+    publish(Pub, X, Key, CType, Payload, #{ delivery_mode => ephemeral }).
 
-%% @equiv publish_sync(Name, Exch, Key, ContentType, Payload, #{ delivery_mode => ephermeral })
+%% @equiv publish_sync(Name, Exch, Key, ContentType, Payload, #{ delivery_mode => ephemeral })
 publish_sync(Pub, X, Key, CType, Payload) ->
-    publish_sync(Pub, X, Key, CType, Payload, #{ delivery_mode => ephermeral }).
+    publish_sync(Pub, X, Key, CType, Payload, #{ delivery_mode => ephemeral }).
 
 %% @doc publish(Name, Exch, Key, ContentType, Payload, Opts) publishes messages.
 %%
@@ -81,7 +81,7 @@ publish_sync(Pub, X, Key, CType, Payload) ->
 %%
 %% Options is a map of options. Currently we support:
 %%
-%% * delivery_mode :: persistent | ephermeral (ephermeral is the default)
+%% * delivery_mode :: persistent | ephemeral (ephemeral is the default)
 %%
 %% Publication is asynchronous, so it never fails, but of course, if network conditions are
 %% outright miserable, it may fail to publish the message.
