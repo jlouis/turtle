@@ -15,12 +15,20 @@
 -module(turtle).
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+%% High level API
+-export([
+	publish/5, publish/6,
+	publish_sync/5, publish_sync/6,
+	rpc/5,
+	rpc_await/3, rpc_await_monitor/3,
+	rpc_cancel/2,
+	rpc_sync/5, rpc_sync/6
+]).
+
 %% Low level API
 -export([
 	declare/2,
 	open_channel/1,
-	publish/5, publish/6,
-	publish_sync/5, publish_sync/6,
 	consume/2,
 	qos/2
 ]).
@@ -80,6 +88,67 @@ publish_sync(Pub, X, Key, CType, Payload) ->
 %% @end
 publish(Pub, X, Key, CType, Payload, Opts) ->
     turtle_publisher:publish(Pub, X, Key, CType, Payload, Opts).
+
+%% @doc rpc/5 performs RPC calls over a publisher
+%% The call returns `{ok, Opaque, T}' where `Opaque' is an opaque token for the query,
+%% and `T' is the time it took for confirmation.
+%% @end
+rpc(Pub, X, Key, CType, Payload) ->
+    turtle_publisher:rpc_call(Pub, X, Key, CType, Payload, #{ delivery_mode => ephemeral }).
+
+%% @doc rpc_await/3 awaits the response of an opaque value
+%% @end
+rpc_await(Publisher, Opaque, Timeout) ->
+    MRef = monitor(process, Publisher),
+    case rpc_await_monitor(Opaque, Timeout, MRef) of
+        {error, timeout} ->
+            demonitor(MRef, [flush]),
+            {error, timeout};
+        {error, Reason} ->
+            {error, Reason};
+        Reply ->
+            demonitor(MRef, [flush]),
+            Reply
+    end.
+
+%% @doc rpc_await_monitor/3 awaits a response or a monitor timeout
+%% This variant allows you to reuse a monitor rather than setting a new one every
+%% time on the publisher. One tends to be enough :)
+%% @end
+rpc_await_monitor(Opaque, Timeout, MRef) ->
+    receive
+        {rpc_reply, Opaque, T, ContentType, Payload} ->
+            {ok, T, ContentType, Payload};
+        {'DOWN', MRef, process, _, Reason} ->
+            {error, {publisher_down, Reason}}
+    after Timeout ->
+        {error, timeout}
+    end.
+    
+%% @doc rpc_cancel/2 cancels an opaque message on the publisher
+%% @end
+rpc_cancel(Publisher, Opaque) ->
+    ok = turtle_publisher:rpc_cancel(Publisher, Opaque),
+    receive
+        {rpc_reply, Opaque, _, _, _} -> ok
+    after 0 ->
+        ok
+    end.
+
+%% @equiv rpc_sync(Pub, X, Key, CType, Payload, #{ timeout => 5000 })
+rpc_sync(Pub, X, Key, CType, Payload) ->
+    rpc_sync(Pub, X, Key, CType, Payload, #{ timeout => 5000 }).
+
+%% @doc rpc_sync/6 performs a synchronous RPC call over AMQP
+%% @end
+rpc_sync(Pub, X, Key, CType, Payload, #{ timeout := Timeout }) ->
+    {ok, Opaque, _T} = rpc(Pub, X, Key, CType, Payload),
+    case rpc_await(Pub, Opaque, Timeout) of
+        {ok, T2, RepCType, RepPayload} ->
+             {ok, T2, RepCType, RepPayload};
+        {error, timeout} ->
+            rpc_cancel(Pub, Opaque)
+    end.
 
 %% @doc publish_sync/6 publishes messages synchronously
 %% This variant of publish, will publish the message synchronously to the broker, and
