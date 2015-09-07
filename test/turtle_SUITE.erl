@@ -5,7 +5,7 @@
 -compile(export_all).
 
 suite() ->
-    [{timetrap, {seconds, 15}}].
+    [{timetrap, {seconds, 30}].
 
 init_per_group(basic, Config) ->
 %%     {ok, _SaslApps} = application:ensure_all_started(sasl),
@@ -31,12 +31,21 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     ok.
 
+init_per_testcase(rpc_dbg_disable, Config) ->
+    dbg:tracer(),
+    dbg:p(all, c),
+    dbg:tpl(turtle_subscriber, '_', '_', cx),
+    dbg:tpl(amqp_channel, cast, '_', cx),
+    Config;
 init_per_testcase(send_recv, Config) ->
     exometer:delete([amqp_server, local_publisher, casts]),
     Config;
 init_per_testcase(_Case, Config) ->
     Config.
 
+end_per_testcase(rpc_dbg_disable, _Config) ->
+    dbg:stop_clear(),
+    ok;
 end_per_testcase(_Case, _Config) ->
     ok.
 
@@ -49,6 +58,7 @@ basic_group() ->
    [{basic, [], [
        send_recv,
        send_recv_confirm,
+       rpc,
        kill_publisher,
        kill_service
    ]}].
@@ -133,6 +143,48 @@ send_recv_confirm(_Config) ->
     1 = CastsA - CastsB,
     MsgsA = get_msgs(),
     2 = MsgsA - MsgsB,
+    ok.
+
+rpc(_Config) ->
+    X = <<"rpc_exchange">>,
+    Q = <<"rpc_queue">>,
+    
+    ct:log("Add a subscriber service, echoing incoming messages"),
+    F = fun(_Key, ContentType, Payload, _State) ->
+        {reply, ContentType, Payload}
+    end,
+    {ok, _ServicePid} = turtle_service:start_link(
+        #{
+            name => local_service,
+            connection => amqp_server,
+            function => F,
+            declarations =>
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
+            subscriber_count => 3,
+            prefetch_count => 10,
+            consume_queue => Q
+        }),
+        
+    ct:log("Start a new publisher process"),
+    {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server, [],
+               #{ confirms => true, rpc => enable }),
+
+    ct:log("Await the start of the publisher"),
+    gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
+    ct:log("Await the start of the service"),
+    gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+    
+    ct:log("Run a single call"),
+    {ok, _, <<"text/plain">>, <<"Hello world!">>} =
+        turtle:rpc_sync(local_publisher, X, Q, <<"text/plain">>, <<"Hello world!">>),
+        
+    ct:log("Run another single call"),
+    {ok, _, <<"text/plain">>, <<"Hello world! (2)">>} =
+        turtle:rpc_sync(local_publisher, X, Q, <<"text/plain">>, <<"Hello world! (2)">>),
+    
+    run_many_rpc(5, 10*1000),
     ok.
 
 send_recv(_Config) ->
@@ -320,3 +372,34 @@ get_msgs() ->
     {ok, SVals} = exometer:get_value([amqp_server, local_service, msgs]),
     proplists:get_value(one, SVals).
 
+run_many_rpc(Workers, K) ->
+    F = fun() ->
+         random:seed(erlang:now()),
+         rpc_worker_loop(K),
+         ct:log("Worker done"),
+         ok
+    end,
+    Processes = [spawn_monitor(F) || _ <- lists:seq(1, Workers)],
+    ct:log("Spawned workers"),
+    await(Processes).
+    
+await([{_Pid, MRef} | Left]) ->
+    receive
+        {'DOWN', MRef, process, _, normal} ->
+            await(Left);
+        {'DOWN', MRef, process, _, Reason} ->
+            {error, Reason}
+    after 20000 ->
+        {error, timeout}
+    end;
+await([]) -> ok.
+
+rpc_worker_loop(0) -> ok;
+rpc_worker_loop(K) ->
+    X = <<"rpc_exchange">>,
+    Q = <<"rpc_queue">>,
+
+    I = random:uniform(10000),
+    {ok, _, <<"ctype">>, <<I:64/integer>>} =
+        turtle:rpc_sync(local_publisher, X, Q, <<"ctype">>, <<I:64/integer>>),
+    rpc_worker_loop(K-1).
