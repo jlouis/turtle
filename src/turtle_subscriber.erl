@@ -167,7 +167,7 @@ reply(_Ch, _CorrID, undefined, _CType, _Msg) ->
     ok;
 reply(Ch, CorrID, ReplyTo, CType, Msg) ->
     Publish = #'basic.publish' {
-        exchange = <<"amq.direct">>,
+        exchange = <<>>,
         routing_key = ReplyTo
     },
     Props = #'P_basic' { content_type = CType, correlation_id = CorrID },
