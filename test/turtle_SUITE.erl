@@ -5,7 +5,7 @@
 -compile(export_all).
 
 suite() ->
-    [{timetrap, {seconds, 30}].
+    [{timetrap, {seconds, 30}}].
 
 init_per_group(basic, Config) ->
 %%     {ok, _SaslApps} = application:ensure_all_started(sasl),
