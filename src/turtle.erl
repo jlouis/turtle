@@ -148,7 +148,10 @@ rpc_sync(Pub, X, Key, CType, Payload, #{ timeout := Timeout }) ->
         {ok, T2, RepCType, RepPayload} ->
              {ok, T2, RepCType, RepPayload};
         {error, timeout} ->
-            rpc_cancel(Pub, Opaque)
+            ok = rpc_cancel(Pub, Opaque),
+            {error, timeout};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 %% @doc publish_sync/6 publishes messages synchronously
