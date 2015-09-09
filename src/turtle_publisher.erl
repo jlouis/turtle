@@ -42,6 +42,7 @@
          conn_name,
          name,
 	channel,
+	channel_ref,
 	conn_ref,
 	confirms,
 	reply_queue,
@@ -116,6 +117,7 @@ init([Name, ConnName, Options]) ->
     %% Initialize the system in the {initializing,...} state and await the presence of
     %% a connection under the given name without blocking the process. We replace
     %% the state with a #state{} record once that happens (see handle_info/2)
+    process_flag(trap_exit, true),
     Ref = gproc:nb_wait({n,l,{turtle,connection,ConnName}}),
     ok = exometer:ensure([ConnName, Name, casts], spiral, []),
     {ok, {initializing, Name, Ref, ConnName, Options}}.
@@ -156,6 +158,27 @@ handle_cast(Cast, State) ->
     {noreply, State}.
 
 %% @private
+handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, N, Ref, CName, Options}) ->
+    {ok, Channel} = turtle:open_channel(CName),
+    #{ declarations := Decls, confirms := Confirms} = Options,
+    ok = turtle:declare(Channel, Decls),
+    ok = turtle:qos(Channel, Options),
+    ok = handle_confirms(Channel, Options),
+    {ok, ReplyQueue, Tag} = handle_rpc(Channel, Options),
+    ConnMRef = monitor(process, Pid),
+    ChanMRef = monitor(process, Channel),
+    reg(N),
+    {noreply,
+      #state {
+        channel = Channel,
+        channel_ref = ChanMRef,
+        conn_ref = ConnMRef,
+        conn_name = CName,
+        confirms = Confirms,
+        corr_id = 0,
+        reply_queue = ReplyQueue,
+        consumer_tag = Tag,
+        name = N}};
 handle_info(#'basic.ack' { delivery_tag = Seq, multiple = Multiple},
 	#state { confirms = true } = InState) ->
     {ok, State} = confirm(ack, Seq, Multiple, InState),
@@ -164,27 +187,10 @@ handle_info(#'basic.nack' { delivery_tag = Seq, multiple = Multiple },
 	#state { confirms = true } = State) ->
     {ok, State} = confirm(nack, Seq, Multiple, State),
     {noreply, State};
-handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, N, Ref, CName, Options}) ->
-    {ok, Channel} = turtle:open_channel(CName),
-    #{ declarations := Decls, confirms := Confirms} = Options,
-    ok = turtle:declare(Channel, Decls),
-    ok = turtle:qos(Channel, Options),
-    ok = handle_confirms(Channel, Options),
-    {ok, ReplyQueue, Tag} = handle_rpc(Channel, Options),
-    MRef = erlang:monitor(process, Pid),
-    reg(N),
-    {noreply,
-      #state {
-        channel = Channel,
-        conn_ref = MRef,
-        conn_name = CName,
-        confirms = Confirms,
-        corr_id = 0,
-        reply_queue = ReplyQueue,
-        consumer_tag = Tag,
-        name = N}};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
     {stop, {error, {connection_down, Reason}}, State};
+handle_info({'DOWN', MRef, process, _, Reason}, #state { channel_ref = MRef } = State) ->
+    {stop, {error, {channel_down, Reason}}, State#state { channel = none }};
 handle_info({'DOWN', MRef, process, _, _Reason}, #state { in_flight = IF } = State) ->
     {noreply, State#state { in_flight = track_cancel_monitor(MRef, IF) }};
 handle_info({#'basic.deliver' { delivery_tag = Tag}, Content}, State) ->
@@ -200,6 +206,7 @@ handle_info(Info, State) ->
 
 %% @private
 terminate(_Reason, #state { channel = Channel }) when is_pid(Channel) ->
+    amqp_channel:close(Channel),
     ok;
 terminate(_Reason, _State) ->
     ok.

@@ -26,6 +26,7 @@
 -record(state, {
     name,
     channel,
+    channel_ref,
     conf,
     conn_ref
  }).
@@ -71,11 +72,20 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, Ref,
     ok = turtle:declare(Ch, Decls),
     Pool = gproc:where({n,l,{turtle,service_pool, Name}}),
     add_subscribers(Pool, Conf#{ channel => Ch}, K),
-    MRef = erlang:monitor(process, Pid),
+    MRef = monitor(process, Pid),
+    ChMref = monitor(process, Ch),
     reg(Name),
-    {noreply, #state { conn_ref = MRef, channel = Ch, conf = Conf, name = Name }};
+    {noreply,
+      #state {
+        conn_ref = MRef,
+        channel_ref = ChMref,
+        channel = Ch,
+        conf = Conf,
+        name = Name }};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
     {stop, {error, {connection_down, Reason}}, State};
+handle_info({'DOWN', MRef, process, _, Reason}, #state { channel_ref = MRef } = State) ->
+    {stop, {error, {channel_down, Reason}}, State#state { channel = none }};
 handle_info(#'basic.return' {} = Return, #state { name = Name } = State) ->
     lager:info("Channel ~p received a return from AMQP: ~p", [Name, Return]),
     {noreply, State};
@@ -86,6 +96,7 @@ handle_info(Info, State) ->
 %% @private
 terminate(_Reason, #state { channel = Ch }) when is_pid(Ch) ->
     ok = amqp_channel:unregister_return_handler(Ch),
+    ok = amqp_channel:close(Ch),
     ok;
 terminate(_Reason, _State) ->
     ok.
