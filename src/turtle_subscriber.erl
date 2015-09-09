@@ -33,6 +33,7 @@
 	invoke_state = init,
 	handle_info = undefined,
 	channel,
+	channel_ref,
 	consumer_tag
  }).
 
@@ -51,7 +52,9 @@ init([#{
         function := Fun,
         connection := ConnName,
         name := Name } = Conf]) ->
+    process_flag(trap_exit, true),
     {ok, Tag} = turtle:consume(Channel, Queue),
+    MRef = monitor(process, Channel),
     ok = exometer:ensure([ConnName, Name, msgs], spiral, []),
     ok = exometer:ensure([ConnName, Name, latency], histogram, []),
     {ok, #state {
@@ -60,6 +63,7 @@ init([#{
         invoke_state = invoke_state(Conf),
         handle_info = handle_info(Conf),
         channel = Channel,
+        channel_ref = MRef,
         conn_name = ConnName,
         name = Name }}.
 
@@ -103,6 +107,8 @@ handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
         ok ->
            {noreply, State}
     end;
+handle_info({'DOWN', MRef, process, _, Reason}, #state { channel_ref = MRef } = State) ->
+    {stop, {channel_down, Reason}, State#state { channel = none }};
 handle_info(Info, #state { handle_info = undefined } = State) ->
     lager:warning("Unknown info message: ~p", [Info]),
     {noreply, State};
@@ -111,6 +117,9 @@ handle_info(Info, #state { handle_info = HandleInfo, invoke_state = IState } = S
     {noreply, State#state { invoke_state = IState2 }}.
 
 %% @private
+terminate(_, #state { consumer_tag = Tag, channel = Ch }) when is_pid(Ch) ->
+    turtle:cancel(Ch, Tag),
+    ok;    
 terminate(_Reason, _State) ->
     ok.
 

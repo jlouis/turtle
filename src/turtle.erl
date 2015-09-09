@@ -29,7 +29,7 @@
 -export([
 	declare/2,
 	open_channel/1,
-	consume/2,
+	consume/2, cancel/2,
 	qos/2
 ]).
 
@@ -170,6 +170,11 @@ consume(Channel, Queue) ->
    #'basic.consume_ok' { consumer_tag = Tag } =
        amqp_channel:call(Channel, Sub),
    {ok, Tag}.
+
+cancel(Channel, Tag) ->
+   Cancel = #'basic.cancel' { consumer_tag = Tag },
+   #'basic.cancel_ok' {} = amqp_channel:call(Channel, Cancel),
+   ok.
 
 %% @doc qos/2 set QoS parameters on a queue according to configuration
 %% @end
