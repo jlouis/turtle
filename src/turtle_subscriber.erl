@@ -88,7 +88,7 @@ handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
 	  invoke = Fun, invoke_state = IState,
 	  channel = Channel, conn_name = CN, name = N } = State) ->
     S = turtle_time:monotonic_time(),
-    case handle_message(Fun, Key, Content, IState, Channel) of
+    try handle_message(Fun, Key, Content, IState, Channel) of
         {ack, IState2} ->
            E = turtle_time:monotonic_time(),
            exometer:update([CN, N, msgs], 1),
@@ -106,6 +106,12 @@ handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
            {noreply, State};
         ok ->
            {noreply, State}
+    catch
+        Class:Error ->
+           lager:error("Handler function crashed: {~p, ~p}, stack: ~p",
+               [Class, Error, erlang:get_stacktrace()]),
+           ok = amqp_channel:cast(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false }),
+           {stop, {Class, Error}, State}
     end;
 handle_info({'DOWN', MRef, process, _, normal}, #state { channel_ref = MRef } = State) ->
     {stop, normal, State#state { channel = none }};
