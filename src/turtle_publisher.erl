@@ -1,12 +1,5 @@
 %%% @doc The publisher is a helper for publishing messages on a channel
 %%% @end
-%%
-%% TODO LIST:
-%% * Handle monitor 'DOWN' messages
-%% * Handle publisher-confirm path for RPC calls:
-%%		The client must cancel NACKs itself!
-%% * Handle the client path as well!
-
 -module(turtle_publisher).
 -behaviour(gen_server).
 -include_lib("amqp_client/include/amqp_client.hrl").
@@ -189,6 +182,8 @@ handle_info(#'basic.nack' { delivery_tag = Seq, multiple = Multiple },
     {noreply, State};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
     {stop, {error, {connection_down, Reason}}, State};
+handle_info({'DOWN', MRef, process, _, normal}, #state { channel_ref = MRef } = State) ->
+    {stop, normal, State#state { channel = none }};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { channel_ref = MRef } = State) ->
     {stop, {error, {channel_down, Reason}}, State#state { channel = none }};
 handle_info({'DOWN', MRef, process, _, _Reason}, #state { in_flight = IF } = State) ->

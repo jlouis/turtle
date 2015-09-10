@@ -107,6 +107,8 @@ handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
         ok ->
            {noreply, State}
     end;
+handle_info({'DOWN', MRef, process, _, normal}, #state { channel_ref = MRef } = State) ->
+    {stop, normal, State#state { channel = none }};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { channel_ref = MRef } = State) ->
     {stop, {channel_down, Reason}, State#state { channel = none }};
 handle_info(Info, #state { handle_info = undefined } = State) ->

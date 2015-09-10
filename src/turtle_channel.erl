@@ -84,6 +84,8 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, Ref,
         name = Name }};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
     {stop, {error, {connection_down, Reason}}, State};
+handle_info({'DOWN', MRef, process, _, normal}, #state { channel_ref = MRef } = State) ->
+    {stop, normal, State#state { channel = none }};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { channel_ref = MRef } = State) ->
     {stop, {error, {channel_down, Reason}}, State#state { channel = none }};
 handle_info(#'basic.return' {} = Return, #state { name = Name } = State) ->
