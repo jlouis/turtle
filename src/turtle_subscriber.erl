@@ -96,14 +96,16 @@ handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
              turtle_time:convert_time_unit(E-S, native, milli_seconds)),
            ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag }),
            {noreply, State#state { invoke_state = IState2 }};
-        reject ->
+        {reject, IState2} ->
            exometer:update([CN, N, rejects], 1),
-           ok = amqp_channel:cast(Channel, #'basic.reject' { delivery_tag = Tag, requeue=true }),
-           {noreply, State};
-        remove ->
+           ok = amqp_channel:cast(Channel,
+           	#'basic.reject' { delivery_tag = Tag, requeue=true }),
+           {noreply, State#state { invoke_state = IState2}};
+        {remove, IState2} ->
            exometer:update([CN, N, removals], 1),
-           ok = amqp_channel:cast(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false}),
-           {noreply, State};
+           ok = amqp_channel:cast(Channel,
+           	#'basic.reject' { delivery_tag = Tag, requeue = false}),
+           {noreply, State#state { invoke_state = IState2}};
         ok ->
            {noreply, State}
     catch
@@ -154,8 +156,10 @@ handle_message(Fun, Key,
         {reply, CType, Msg, IState2} ->
             reply(Channel, CorrID, ReplyTo, CType, Msg),
             {ack, IState2};
-        reject -> reject;
-        remove -> remove;
+        reject -> {reject, IState};
+        {reject, IState2} -> {reject, IState2};
+        remove -> {remove, IState};
+        {remove, IState2} -> {remove, IState2};
         ok -> ok
     catch
         Class:Error ->
