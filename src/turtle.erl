@@ -91,7 +91,7 @@ publish(Pub, X, Key, CType, Payload, Opts) ->
 
 %% @doc rpc/5 performs RPC calls over a publisher
 %% The call returns `{ok, Opaque, T}' where `Opaque' is an opaque token for the query,
-%% and `T' is the time it took for confirmation.
+%% and `T' is the time it took for confirmation in milli seconds.
 %% @end
 rpc(Pub, X, Key, CType, Payload) ->
     turtle_publisher:rpc_call(Pub, X, Key, CType, Payload, #{ delivery_mode => ephemeral }).
