@@ -1,0 +1,4 @@
+@author Shopgun Aps.
+@title turtle - Convenience wrapper for rabbitmq-erlang-client
+
+This application wraps the RabbitMQ Erlang client and provides a simpler interface which aims to cover approx. 80% of all use cases.
