@@ -1,5 +1,5 @@
+%%% @private
 -module(turtle_time).
-
 %% We don't want warnings about the use of erlang:now/0 in
 %% this module.
 -compile(nowarn_deprecated_function).
