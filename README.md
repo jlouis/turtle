@@ -114,6 +114,10 @@ Running tests is as simple as:
 
 	make test
 
+# Changes
+
+* *Version 1.4.0* — First Open Source release. Every change will be relative to this release version.
+
 # Motivation
 
 We need to talk a lot of RabbitMQ if we are to start slowly hoisting work out of existing systems and into Erlang. In a transition phase, we need some way to communicate. RabbitMQs strength here is its topology-flexibility, not its speed. We don't think we'll hit any speed problem in RMQ for the forseeable future, but the flexibility of the platform is a nice thing to have.
