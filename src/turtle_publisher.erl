@@ -55,6 +55,7 @@
 %% ----------------------------------------------------------
 
 %% @doc Start a new publication worker
+%%
 %% Provides an OTP gen_server for supervisor linkage. The `Name' is the name of
 %% this publisher (which it registers itself in gproc as). The `Connection' is the turtle-name
 %% for the connection, i.e., `amqp_server'. Finally, `Declarations' is a declaration list to
@@ -65,10 +66,11 @@ start_link(Name, Connection, Declarations) ->
     gen_server:start_link(?MODULE, [Name, Connection, Options], []).
 
 %% @doc start_link/4 starts a publisher with options
+%%
 %% This variant of start_link takes an additional `Options' section which can be
 %% used to set certain publisher-specific options:
 %% <dl>
-%%   <dt>confirms</dt><dd>should be enable publisher confirms?</dd>
+%%   <dt>#{ confirms => true }</dt><dd>should be enable publisher confirms?</dd>
 %% </dl>
 %% @end
 start_link(Name, Connection, Declarations, InOptions) ->
@@ -83,22 +85,33 @@ where(N) ->
     gproc:where({n,l,{turtle,publisher,N}}).
 
 %% @doc publish a message asynchronously to RabbitMQ
+%%
 %% The specification is that you have to provide all parameters, because experience
 %% has shown that you end up having to tweak these things quite a lot in practice.
-%% Hence we provide the full kind of messaging, rather than a subset
+%% Hence we provide the full kind of messaging, rather than a subset.
+%%
 %% @end
 publish(Publisher, Exch, Key, ContentType, Payload, Opts) ->
     Pub = mk_publish(Exch, Key, ContentType, Payload, Opts),
     gen_server:cast(where(Publisher), Pub).
 
+%% @doc publish a message synchronously to RabbitMQ
+%%
+%% A synchronous publish means the caller is blocked until the message is
+%% on-the-wire toward the RabbitMQ server. It doesn't guarantee delivery, for
+%% which yu must use publisher confirms. The options are as in {@link publish/5}
+%%
+%% @end
 publish_sync(Publisher, Exch, Key, ContentType, Payload, Opts) ->
     Pub = mk_publish(Exch, Key, ContentType, Payload, Opts),
     gen_server:call(where(Publisher), {call, Pub}).
 
+%% @private
 rpc_call(Publisher, Exch, Key, ContentType, Payload, Opts) ->
     Pub = mk_publish(Exch, Key, ContentType, Payload, Opts),
     gen_server:call(where(Publisher), {rpc_call, Pub}).
 
+%% @private
 rpc_cancel(Publisher, Opaque) ->
     gen_server:call(where(Publisher), {rpc_cancel, Opaque}).
 
