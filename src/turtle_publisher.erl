@@ -6,7 +6,7 @@
 
 %% Lifetime
 -export([
-	start_link/3, start_link/4, where/1
+	start_link/3, start_link/4, where/1, child_spec/4
 ]).
 
 %% API
@@ -53,6 +53,14 @@
 
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
+
+%% @doc Provide a child spec for OTP supervisor linkage
+%%
+%% The options are is as in {@link start_link/4}
+%% @end
+child_spec(Name, Conn, Decls, Options) ->
+    {Name, {?MODULE, start_link, [Name, Conn, Decls, Options]},
+        permanent, 5000, worker, [?MODULE]}.
 
 %% @doc Start a new publication worker
 %%
