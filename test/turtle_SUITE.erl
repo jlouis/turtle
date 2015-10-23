@@ -374,7 +374,7 @@ get_msgs() ->
 
 run_many_rpc(Workers, K) ->
     F = fun() ->
-         random:seed(erlang:now()),
+         random:seed(erlang:timestamp()),
          rpc_worker_loop(K),
          ct:log("Worker done"),
          ok
