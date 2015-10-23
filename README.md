@@ -1,4 +1,4 @@
-# Purpose
+# Turtle - A wrapper on the RabbitMQ Erlang Client
 
 The `turtle` application is built to be a wrapper around the RabbitMQ
 standard Erlang driver. The purpose is to enable faster implementation
@@ -30,21 +30,16 @@ connection proxy handles the asynchronous non-blocking behavior.
 * Tracks timing of most calls. This allows you to gather metrics on
 the behavior of underlying systems and in turn handle erroneous cases
 proactively.
+* Implements embeddable supervision trees which are added to your application. Handles errors gracefully and makes sure connections are reaped correctly toward the RabbitMQ cluster.
+* Uses exometer to track statistics automatically for proxies and services. This allows one to gather information about the behavior of how the application uses RabbitMQ.
 
 ## Ideology
 
-The Turtle application deliberately exposes the underlying RabbitMQ
-configuration to the user. This allows the user to handle most
-low-level RabbitMQ settings directly with no intervention and change
-to this application.
+The Turtle application deliberately exposes the underlying RabbitMQ configuration to the user. This allows the user to handle most low-level RabbitMQ settings directly without having to learn a new language of configuration.
 
-Furthermore, the goal is to wrap the `rabbitmq-erlang-client`, provide
-a helpful layer and then get out of the way. The goal is not to make a
-replacement way of operating. Just take some of the common tasks in
-RabbitMQ and put them into a framework. That is, we aim to be a 80%
-solution, not a complete solution to every problem you might have.
+Furthermore, the goal is to wrap the `rabbitmq-erlang-client`, provide a helpful layer and then get out of the way. The goal is not to make a replacement which covers every use case. Just common tasks in RabbitMQ. That is, we aim to be a 80% solution, not a complete solution to every problem you might have.
 
-## Unsolved aspects of RabbitMQ
+## What we do not solve
 
 Very specific and intricate RabbitMQ connections are better handled
 directly with the driver. This project aims to capture common use
@@ -53,7 +48,7 @@ low-level aspects of the driver.
 
 Things have been added somewhat on-demand. There are definitely setups
 which are outside the scope of this library/application. But it is
-general enough to handle every kind of messaging pattern I've seen
+general enough to handle most messaging patterns we've seen
 over the years when using RabbitMQ.
 
 The `rabbitmq-erlang-driver` is a complex beast. Way too complex one
@@ -65,15 +60,15 @@ of the system against it.
 ## Performance considerations
 
 Turtle has been tested in a simple localhost setup in which is can
-50.000 RPCs per second. This is the current known lower bound for the
+50.000 RPC roundtrips per second. This is the current known lower bound for the
 system, and given improvement in RabbitMQ and the Erlang subsystem
-this number may become better over time.
+this number may become better over time. It is unlikely to become worse.
 
 # Architecture
 
 Turtle is an OTP application with a single supervisor. Given a
 configuration in `sys.config`, Turtle maintains connections to the
-RabbitMQ clusters given in the configuration.
+RabbitMQ clusters given in the configuration in this supervisor.
 
 Every other part of turtle provides a supervisor tree/worker process
 which can be linked into the supervisor tree of a client application.
@@ -82,23 +77,17 @@ surrounding application. Monitors on the connection maintainers makes
 sure the tree is correctly closed/stopped/restarted if a connection
 dies.
 
+Turtle uses `gproc` as its registry. Every connection, channel, service of proxy is registered in gproc under `{n,l,{turtle,Kind, Name}}` where `Kind` signifies what kind of registration it is for.
+
 There are two kinds of children you can link into your applications
 supervisor tree:
 
-* Publishers - These form a connection endpoint toward RabbitMQ. They
-allow for publication by sending messages, and also for doing RPC
-calls over RabbitMQ. Usually, one publisher is enough for an Erlang
-node, even though every message factors through the publisher proxy.
-But in setups with lots of load, having multiple publishers may be
-necessary.
-* Subscribers - These maintain a pool of workers which handle incoming
-messages on a Queue. Each worker runs a (stateful) callback module
-which allows the application to easily handle incoming requests
-through a processor function.
+* Publishers - These form a connection endpoint/proxy toward RabbitMQ. They allow for publication by sending messages, and also for doing RPC calls over RabbitMQ. Usually, one publisher is enough for an Erlang node, even though every message factors through the publisher proxy. But in setups with lots of load, having multiple publishers may be necessary.
+* Subscribers - These maintain a pool of workers which handle incoming messages on a Queue. Each worker runs a (stateful) callback module which allows the application to easily handle incoming requests through a processor function.
 
 # Building
 
-You can build turtle with a simple
+Turtle is built using rebar3. Turtle is built primarily for Erlang/OTP release 18 and later, but it should be usable in release 17.5 as well. You can build turtle with a simple
 
     make compile
 
@@ -108,7 +97,7 @@ or by using rebar directly:
 
 # Testing
 
-The tests has a prerequisite which is a running `rabbitmq-server`. In the Travis CI environment, we request such a server to be running, so we can carry out tests against it, but for local development, you will need to add such a server to the environment.
+The tests has a prerequisite which is a running `RabbitMQ` instance on localhost port 5672`. In the Travis CI environment, we request such a server to be running, so we can carry out tests against it, but for local development, you will need to add such a server to the environment.
 
 Running tests is as simple as:
 
@@ -116,13 +105,14 @@ Running tests is as simple as:
 
 # Changes
 
+* *Version 1.4.1* — Documentation updates to make it easier to use the application and explain its purpose better.
 * *Version 1.4.0* — First Open Source release. Every change will be relative to this release version.
 
 # Motivation
 
-We need to talk a lot of RabbitMQ if we are to start slowly hoisting work out of existing systems and into Erlang. In a transition phase, we need some way to communicate. RabbitMQs strength here is its topology-flexibility, not its speed. We don't think we'll hit any speed problem in RMQ for the forseeable future, but the flexibility of the platform is a nice thing to have.
+Turtle was created to alleviate a common need in many systems we had. As we started to move more and more work into a messaging platform based on RabbitMQ, common patterns emerged. This application captures these common patterns and solves the low-level work once and for all.
 
-We don't want to write low-level RabbitMQ stuff in each and every application. Hence, we provide an application/library that makes the invocation of RabbitMQ easier in our other projects. This library is called `turtle' 
+In addition, by factoring all users through a single implementation, we have an obvious hook-point for statistics, and logging. And as we fix errors, we fix those in all dependent applications.
 
 # Usage
 
@@ -240,7 +230,7 @@ describe below. To make an RPC call, execute:
 The response contains the `NTime` which is the time it took to process
 the RPC for the underlying system.
 
-To run an RPC call asynchronously, you fist execute the `rpc/5` call:
+To run an RPC call asynchronously, you first execute the `rpc/5` call:
 
     {ok, FToken, Time} =
       turtle:rpc(my_publisher, Exch, RKey, CType, Payload),
@@ -386,7 +376,7 @@ understand itself, it is forwarded to the `handle_info` function:
 It is intended to be used to handle a state change upon external
 events.
 
-# Operation
+# Operation and failure modes
 
 The `turtle` application will try to keep connections to RabbitMQ at
 all times. Failing connections restart the connector, but it also acts
@@ -398,4 +388,10 @@ like a simple circuit breaker if there is no connection. Hence
 > has been disconnected.
 
 Connections are registered in `gproc` so a user can grab the
-connection state from there.
+connection state from there. Especially by registering for non-blocking waits until a name (re-)appears.
+
+If a publisher proxy fails, it will affect the supervisor tree in which it is installed in the usual way. Currently active RPCs will be gone. Hence it is advisable to install a monitor in the proxy, as is the case in the exposition above. This will allow a caller blocked on an RPC to react such that you can continue operation.
+
+If a callback function in a service crashes, the corresponding process in the subscription pool will stop abnormally. This forces it to restart. If this happens more than 100 times in an hour, it will reach max restart intensity and restart that part of the supervisor tree.
+
+If a connection dies, every publisher or service relying on it crashes and reaps the supervisor tree accordingly.

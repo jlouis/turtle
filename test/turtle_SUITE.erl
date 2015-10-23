@@ -11,7 +11,7 @@ init_per_group(basic, Config) ->
 %%     {ok, _SaslApps} = application:ensure_all_started(sasl),
 %%     dbg:tracer(),
 %%     dbg:p(all, c),
-%%    dbg:tpl(amqp_selective_consumer, handle_consume, '_', cx),
+%%     dbg:tpl(amqp_selective_consumer, handle_consume, '_', cx),
 %%     dbg:tpl(amqp_selective_consumer, deliver, 3, cx),
     {ok, _Apps} = application:ensure_all_started(turtle),
     Config;

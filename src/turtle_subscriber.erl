@@ -123,8 +123,14 @@ handle_info(Info, #state { handle_info = undefined } = State) ->
     lager:warning("Unknown info message: ~p", [Info]),
     {noreply, State};
 handle_info(Info, #state { handle_info = HandleInfo, invoke_state = IState } = State) ->
-    {ok, IState2} = HandleInfo(Info, IState),
-    {noreply, State#state { invoke_state = IState2 }}.
+    try HandleInfo(Info, IState) of
+        {ok, IState2} -> {noreply, State#state { invoke_state = IState2 }}
+    catch
+        Class:Error ->
+            lager:error("Handle info crashed: {~p, ~p}, stack: ~p",
+                [Class, Error, erlang:get_stacktrace()]),
+            {stop, {Class, Error}, State}
+    end.
 
 %% @private
 terminate(_, #state { consumer_tag = Tag, channel = Ch }) when is_pid(Ch) ->
