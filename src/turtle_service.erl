@@ -91,6 +91,6 @@ validate_config(#{
       is_list(Decls),
       is_integer(SC), SC > 0,
       is_integer(PC), PC >= 0,
-      is_atom(Q) ->
+      is_binary(Q) ->
       	ok.
 
