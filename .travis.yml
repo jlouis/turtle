@@ -8,9 +8,3 @@ otp_release:
     - 18.0
 
 script: "make update compile travis-test"
-
-notifications:
-    slack:
-        rooms:
-            - shopgun:UC86BQbSolaCbi1dMJbqZK8j#travis
-            - shopgun:UC86BQbSolaCbi1dMJbqZK8j#erlang

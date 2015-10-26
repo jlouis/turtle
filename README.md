@@ -170,21 +170,20 @@ instance by writing:
     Exch = <<"my_exchange">>,
     PublisherName = my_publisher,
     ConnName = amqp_server, %% As given above
-    AMQPArgs = [
-      PublisherName, ConnName,
-      [#'exchange.declare' {
-        exchange = Exch,
-        type = <<"topic">>,
-        durable = false }]
+    AMQPDecls = [
+      #'exchange.declare' { exchange = Exch, type = <<"topic">>, durable = false }
     ],
     AMQPPoolChildSpec =
-        {publisher, {turtle_publisher, start_link, AMQPArgs},
-            permanent, 5000, worker, [turtle_publisher]},
+        turtle_publisher:child_spec(PublisherName, ConnName, AMQPDecls,
+            #{ confirms => true }),
 
 Note that `AMQPArgs` takes a list of AMQP declarations which can be
 used to create exchanges, queues, and so on. The publisher will verify
 that each of these declarations succeed and will crash if that is not
 the case.
+
+Also note the option `#{ confirms => true }` which is used to signify that we want the exchange to confirm publications back to us. This is automatically handled by the publisher if you
+use it for RPC style messaging.
 
 Once we have a publisher in our tree, we can use it through the
 `turtle` module. The API of `turtle` is envisioned to be stable, so
@@ -321,8 +320,7 @@ child specification for it as in the following:
       consume_queue => Q
     },
 
-    Service = {Name, {turtle_service, start_link, [Config]},
-        transient, infinity, supervisor, [turtle_service]}.
+    ServiceSpec = turtle_service:child_spec(Config),
 
 This configures the `Service` to run. It will first use the
 `declarations` section to declare AMQP queues and bindings. Then it
