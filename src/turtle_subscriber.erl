@@ -110,8 +110,8 @@ handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
            {noreply, State}
     catch
         Class:Error ->
-           lager:error("Handler function crashed: {~p, ~p}, stack: ~p",
-               [Class, Error, erlang:get_stacktrace()]),
+           lager:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
+               [Class, Error, erlang:get_stacktrace(), format_amqp_msg(Content)]),
            ok = amqp_channel:cast(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false }),
            {stop, {Class, Error}, State}
     end;
@@ -152,8 +152,8 @@ handle_message(Fun, Key,
 	    props = #'P_basic' {
 	        content_type = Type,
 	        correlation_id = CorrID,
-	        reply_to = ReplyTo }} = M, IState, Channel) ->
-    try Fun(Key, Type, Payload, IState) of
+	        reply_to = ReplyTo }}, IState, Channel) ->
+    case Fun(Key, Type, Payload, IState) of
         ack -> {ack, IState};
         {ack, IState2} -> {ack, IState2};
         {reply, CType, Msg} ->
@@ -167,10 +167,6 @@ handle_message(Fun, Key,
         remove -> {remove, IState};
         {remove, IState2} -> {remove, IState2};
         ok -> ok
-    catch
-        Class:Error ->
-            lager:warning("Cannot handle message ~p: ~p: ~p (BT: ~p)", [format_amqp_msg(M), Class, Error, erlang:get_stacktrace()]),
-            {remove, IState}
     end.
     
 format_amqp_msg(#amqp_msg { payload = Payload, props = Props }) ->
