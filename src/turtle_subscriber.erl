@@ -170,7 +170,7 @@ handle_message(Fun, Key,
     catch
         Class:Error ->
             lager:warning("Cannot handle message ~p: ~p: ~p (BT: ~p)", [format_amqp_msg(M), Class, Error, erlang:get_stacktrace()]),
-            remove
+            {remove, IState}
     end.
     
 format_amqp_msg(#amqp_msg { payload = Payload, props = Props }) ->
