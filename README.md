@@ -64,6 +64,13 @@ Turtle has been tested in a simple localhost setup in which is can
 system, and given improvement in RabbitMQ and the Erlang subsystem
 this number may become better over time. It is unlikely to become worse.
 
+# Changes
+
+* *Version 1.4.3* — Fix an error in the handling of crashing functions bound to a subscriber. If a subscriber function crashed, we would incorrectly supply a wrong return value which would crash the subscriber. In turn, the errorneous message would never be removed from the queue.
+* *Version 1.4.2* — Introduce a new way to write child_specs through helper functions in their respective modules. Ensures we have a hook point later for better validation of parameters.
+* *Version 1.4.1* — Documentation updates to make it easier to use the application and explain its purpose better.
+* *Version 1.4.0* — First Open Source release. Every change will be relative to this release version.
+
 # Architecture
 
 Turtle is an OTP application with a single supervisor. Given a
@@ -102,11 +109,6 @@ The tests has a prerequisite which is a running `RabbitMQ` instance on localhost
 Running tests is as simple as:
 
 	make test
-
-# Changes
-
-* *Version 1.4.1* — Documentation updates to make it easier to use the application and explain its purpose better.
-* *Version 1.4.0* — First Open Source release. Every change will be relative to this release version.
 
 # Motivation
 
@@ -376,6 +378,8 @@ events.
 
 # Operation and failure modes
 
+This section describes the various failure modes of Turtle and how they are handled.
+
 The `turtle` application will try to keep connections to RabbitMQ at
 all times. Failing connections restart the connector, but it also acts
 like a simple circuit breaker if there is no connection. Hence
@@ -390,6 +394,6 @@ connection state from there. Especially by registering for non-blocking waits un
 
 If a publisher proxy fails, it will affect the supervisor tree in which it is installed in the usual way. Currently active RPCs will be gone. Hence it is advisable to install a monitor in the proxy, as is the case in the exposition above. This will allow a caller blocked on an RPC to react such that you can continue operation.
 
-If a callback function in a service crashes, the corresponding process in the subscription pool will stop abnormally. This forces it to restart. If this happens more than 100 times in an hour, it will reach max restart intensity and restart that part of the supervisor tree.
+If a callback function in a service crashes, the corresponding process in the subscription pool will stop abnormally. The errorneous message will be *removed* permanently from the queue in order to ensure it will not crash other workers bound to the queue. The assumption is that a crashing function is a programming error which should be fixed. If you need access to the message, configure RabbitMQ to use dead-lettering on the queue which will send the message to the dead-letter-exchange (DLX). You can then handle the failing message separately on another queue. If the bound function crashes more than 100 times in an hour, it will reach max restart intensity and restart that part of the supervisor tree.
 
 If a connection dies, every publisher or service relying on it crashes and reaps the supervisor tree accordingly.
