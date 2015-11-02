@@ -83,7 +83,6 @@ start_link(Name, Connection, Declarations) ->
 %% @end
 start_link(Name, Connection, Declarations, InOptions) ->
     Options = maps:merge(?DEFAULT_OPTIONS, InOptions),
-    lager:info("Options: ~p", [Options]),
     gen_server:start_link(?MODULE,
     	[Name, Connection, Options#{ declarations := Declarations }], []).
 
