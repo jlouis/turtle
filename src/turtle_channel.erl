@@ -31,10 +31,14 @@
     conn_ref
  }).
 
+-define(DEFAULT_CONFIGURATION,
+    #{ mode => active }).
+
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
 start_link(Configuration) ->
-    gen_server:start_link(?MODULE, [Configuration], []).
+    MergedConf = maps:merge(?DEFAULT_CONFIGURATION, Configuration),
+    gen_server:start_link(?MODULE, [MergedConf], []).
 	
 %% CALLBACKS
 %% -------------------------------------------------------------------
@@ -64,12 +68,13 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, Ref,
       declarations := Decls,
       function := _Fun,
       consume_queue := _Queue,
-      subscriber_count := K
+      subscriber_count := K,
+      mode := Mode
      } = Conf }) ->
     {ok, Ch} = turtle:open_channel(ConnName),
     ok = turtle:qos(Ch, Conf),
     ok = amqp_channel:register_return_handler(Ch, self()),
-    ok = turtle:declare(Ch, Decls),
+    ok = turtle:declare(Ch, Decls, #{ mode => Mode }),
     Pool = gproc:where({n,l,{turtle,service_pool, Name}}),
     add_subscribers(Pool, Conf#{ channel => Ch}, K),
     MRef = monitor(process, Pid),

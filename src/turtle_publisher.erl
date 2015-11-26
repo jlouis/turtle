@@ -48,7 +48,8 @@
 -define(DEFAULT_OPTIONS,
     #{
         declarations => [],
-        confirms => false
+        confirms => false,
+        mode => active
     }).
 
 %% LIFETIME MAINTENANCE
@@ -173,8 +174,8 @@ handle_cast(Cast, State) ->
 %% @private
 handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, N, Ref, CName, Options}) ->
     {ok, Channel} = turtle:open_channel(CName),
-    #{ declarations := Decls, confirms := Confirms} = Options,
-    ok = turtle:declare(Channel, Decls),
+    #{ declarations := Decls, mode := Mode, confirms := Confirms} = Options,
+    ok = turtle:declare(Channel, Decls, #{ mode => Mode }),
     ok = turtle:qos(Channel, Options),
     ok = handle_confirms(Channel, Options),
     {ok, ReplyQueue, Tag} = handle_rpc(Channel, Options),
