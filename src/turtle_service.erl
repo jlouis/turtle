@@ -50,6 +50,8 @@ start_link(#{ name := Name } = Conf) ->
 %%   <dd>The prefetch setting on the channel for QoS and hiding network latency.</dd>
 %% <dt>consume_queue</dt>
 %%   <dd>The queue to consume from for this service.</dd>
+%% <dt>passive</dt>
+%%   <dd>true/false value - designates if we should force passive queue/exchange creation.</dd>
 %% </dl>
 child_spec(#{ name := Name } = Conf) ->
     validate_config(Conf),

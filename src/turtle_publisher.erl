@@ -80,6 +80,8 @@ start_link(Name, Connection, Declarations) ->
 %% used to set certain publisher-specific options:
 %% <dl>
 %%   <dt>#{ confirms => true }</dt><dd>should be enable publisher confirms?</dd>
+%%   <dt>#{ passive => true }</dt>
+%%     <dd>Force queues and exchanges to be declared passively.</dd>
 %% </dl>
 %% @end
 start_link(Name, Connection, Declarations, InOptions) ->
