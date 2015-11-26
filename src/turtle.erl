@@ -295,20 +295,20 @@ open_channel(Name) -> turtle_conn:open_channel(Name).
 -type declaration() :: #'exchange.declare'{} | #'queue.declare'{}.
 
 -spec declare(channel(), [declaration()]) -> ok.
-declare(Channel, Decls) -> declare(Channel, Decls, #{ mode => active }).
+declare(Channel, Decls) -> declare(Channel, Decls, #{ passive => false }).
 
 declare(_Channel, [], _) -> ok;
-declare(Channel, [#'exchange.declare' {} = Exch | Ds], #{ mode := active } = Opts) ->
+declare(Channel, [#'exchange.declare' {} = Exch | Ds], #{ passive := false } = Opts) ->
     #'exchange.declare_ok'{} = amqp_channel:call(Channel, Exch),
     declare(Channel, Ds, Opts);
-declare(Channel, [#'exchange.declare' {} = Exch | Ds], #{ mode := passive} = Opts) ->
+declare(Channel, [#'exchange.declare' {} = Exch | Ds], #{ passive := true} = Opts) ->
     #'exchange.declare_ok'{} = amqp_channel:call(Channel,
 	Exch#'exchange.declare' { passive = true }),
     declare(Channel, Ds, Opts);
-declare(Channel, [#'queue.declare' {} = Queue | Ds], #{ mode := active } = Opts) ->
+declare(Channel, [#'queue.declare' {} = Queue | Ds], #{ passive := false } = Opts) ->
     #'queue.declare_ok'{} = amqp_channel:call(Channel, Queue),
     declare(Channel, Ds, Opts);
-declare(Channel, [#'queue.declare' {} = Queue | Ds], #{ mode := passive } = Opts) ->
+declare(Channel, [#'queue.declare' {} = Queue | Ds], #{ passive := true } = Opts) ->
     #'queue.declare_ok'{} = amqp_channel:call(Channel,
         Queue#'queue.declare' { passive = true }),
     declare(Channel, Ds, Opts);

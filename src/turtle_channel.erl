@@ -32,7 +32,7 @@
  }).
 
 -define(DEFAULT_CONFIGURATION,
-    #{ mode => active }).
+    #{ passive => false }).
 
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
@@ -69,12 +69,12 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, Ref,
       function := _Fun,
       consume_queue := _Queue,
       subscriber_count := K,
-      mode := Mode
+      passive := Passive
      } = Conf }) ->
     {ok, Ch} = turtle:open_channel(ConnName),
     ok = turtle:qos(Ch, Conf),
     ok = amqp_channel:register_return_handler(Ch, self()),
-    ok = turtle:declare(Ch, Decls, #{ mode => Mode }),
+    ok = turtle:declare(Ch, Decls, #{ passive => Passive }),
     Pool = gproc:where({n,l,{turtle,service_pool, Name}}),
     add_subscribers(Pool, Conf#{ channel => Ch}, K),
     MRef = monitor(process, Pid),

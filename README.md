@@ -177,15 +177,17 @@ instance by writing:
     ],
     AMQPPoolChildSpec =
         turtle_publisher:child_spec(PublisherName, ConnName, AMQPDecls,
-            #{ confirms => true }),
+            #{ confirms => true, passive => false }),
 
 Note that `AMQPArgs` takes a list of AMQP declarations which can be
 used to create exchanges, queues, and so on. The publisher will verify
 that each of these declarations succeed and will crash if that is not
 the case.
 
-Also note the option `#{ confirms => true }` which is used to signify that we want the exchange to confirm publications back to us. This is automatically handled by the publisher if you
+Note the option `#{ confirms => true }` which is used to signify that we want the exchange to confirm publications back to us. This is automatically handled by the publisher if you
 use it for RPC style messaging.
+
+Also, note the option `#{ passive => false }`. You can force passive declarations by setting this to `true` in which case declarations will set the `passive` flag where applicable. This ensures you only verify the presence of exchanges/queues on the broker rather than idempotently create them. In a development setting, it is nice to automatically create missing exchanges and queues, but in a production system you may want to create them beforehand.
 
 Once we have a publisher in our tree, we can use it through the
 `turtle` module. The API of `turtle` is envisioned to be stable, so
@@ -319,7 +321,8 @@ child specification for it as in the following:
                routing_key = Bind }],
       subscriber_count => SC,
       prefetch_count => PC,
-      consume_queue => Q
+      consume_queue => Q,
+      passive => false
     },
 
     ServiceSpec = turtle_service:child_spec(Config),
@@ -335,6 +338,8 @@ tells the system how many worker processes to spawn. This can be used
 as a simple way to introduce an artificial concurrency limit into the
 system. Some times this is desirable as you can avoid the system
 flooding other subsystems.
+
+The `passive` flag works as in the case of the publisher: setting this value to `true` forces exchange/queue creation to be passive such that creation fails if the queue is not present already on the broker.
 
 Operation works by initializing the system into the value given by
 `init_state`. Then, every message is handled by the callback given in
