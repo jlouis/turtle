@@ -60,7 +60,8 @@ basic_group() ->
        send_recv_confirm,
        rpc,
        kill_publisher,
-       kill_service
+       kill_service,
+       faulty_service
    ]}].
 
 groups() ->
@@ -251,6 +252,57 @@ send_recv(_Config) ->
     {ok, _SLvals} = exometer:get_value([amqp_server, local_service, latency]),
     ok.
 
+faulty_service(_Config) ->
+    random:seed(),
+    X = <<"send_recv_exchange">>,
+    Q = <<"send_recv_queue">>,
+    
+    ct:log("Add a faulty subscriber, consuming on Q"),
+    Self = self(),
+    F = fun(Key, ContentType, Payload, _State) ->
+        case random:uniform() < 0.5 of
+            true ->
+                error(foo);
+            false ->
+                Self ! {Key, ContentType, Payload},
+                ack
+        end
+    end,
+    
+    {ok, _ServicePid} = turtle_service:start_link(
+        #{
+            name => local_service,
+            connection => amqp_server,
+            function => F,
+            declarations =>
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
+            subscriber_count => 3,
+            prefetch_count => 10,
+            consume_queue => Q
+        }),
+
+    ct:log("Start a new publisher process"),
+    {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }]),
+
+    ct:log("Await the start of the publisher"),
+    gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
+    ct:log("Await the start of the service"),
+    gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+
+    ct:log("Publish some messages on the channel:"),
+    [
+        turtle:publish(local_publisher, X, Q, <<"text/plain">>, <<"The turtle and the hare">>)
+        || _ <- lists:seq(1, 10)],
+    ok = turtle:publish_sync(local_publisher, X, Q, <<"text/plain">>, <<"The hare and the turtle">>),
+
+    ok = faulty_receive(11),
+    ok.
+
 kill_service(_Config) ->
     random:seed(),
     X = <<"send_recv_exchange">>,
@@ -403,3 +455,13 @@ rpc_worker_loop(K) ->
     {ok, _, <<"ctype">>, <<I:64/integer>>} =
         turtle:rpc_sync(local_publisher, X, Q, <<"ctype">>, <<I:64/integer>>),
     rpc_worker_loop(K-1).
+
+faulty_receive(0) -> ok;
+faulty_receive(N) ->
+    receive
+        {_, <<"text/plain">>, <<"The turtle and the hare">>} ->
+            ct:pal("Got message for N=~B", [N]),
+            faulty_receive(N-1)
+    after 10*1000 ->
+        ct:fail(subscription_timeout)
+    end.
