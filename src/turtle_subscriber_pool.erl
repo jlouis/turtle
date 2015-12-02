@@ -34,7 +34,7 @@ init([]) ->
     SubChild =
         {subscriber,
             {turtle_subscriber, start_link, []},
-            transient, 15*1000, worker, [turtle_subscriber]},
+            permanent, 15*1000, worker, [turtle_subscriber]},
 
     {ok, { { simple_one_for_one, 100, 3600}, [SubChild]}}.
 
