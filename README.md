@@ -66,6 +66,9 @@ this number may become better over time. It is unlikely to become worse.
 
 # Changes
 
+* *Version 1.5.1* — Fix a bug in which a crash in the subscribers
+  handler function could lead to unacked message leaks under moderate
+  to high load.
 * *Version 1.5.0* — Support a `forced passive` mode on declarations. Setting this will force turtle to set passive creation on every exchange and queue. This is intended to be used in the case where you have pre-created queues and want to verify the existence of such queues.
 * *Version 1.4.3* — Fix an error in the handling of crashing functions bound to a subscriber. If a subscriber function crashed, we would incorrectly supply a wrong return value which would crash the subscriber. In turn, the errorneous message would never be removed from the queue.
 * *Version 1.4.2* — Introduce a new way to write child_specs through helper functions in their respective modules. Ensures we have a hook point later for better validation of parameters.
