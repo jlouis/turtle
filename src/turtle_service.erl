@@ -73,7 +73,7 @@ init([#{ name := Name } = Conf]) ->
         {pool,
             {turtle_subscriber_pool, start_link, [Name]},
             transient, infinity, supervisor, [turtle_subscriber_pool]},
-    {ok, { { one_for_all, 5, 3600}, [Pool, ChanMgr]}}.
+    {ok, { { one_for_all, 5, 3600}, [ChanMgr, Pool]}}.
     
 validate_config(#{
 	name := N,

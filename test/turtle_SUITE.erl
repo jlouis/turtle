@@ -31,11 +31,12 @@ init_per_suite(Config) ->
 end_per_suite(_Config) ->
     ok.
 
-init_per_testcase(rpc_dbg_disable, Config) ->
+init_per_testcase(xfaulty_service, Config) ->
     dbg:tracer(),
     dbg:p(all, c),
     dbg:tpl(turtle_subscriber, '_', '_', cx),
     dbg:tpl(amqp_channel, cast, '_', cx),
+    dbg:tpl(amqp_channel, call, '_', cx),
     Config;
 init_per_testcase(send_recv, Config) ->
     exometer:delete([amqp_server, local_publisher, casts]),
@@ -43,7 +44,7 @@ init_per_testcase(send_recv, Config) ->
 init_per_testcase(_Case, Config) ->
     Config.
 
-end_per_testcase(rpc_dbg_disable, _Config) ->
+end_per_testcase(xfaulty_service, _Config) ->
     dbg:stop_clear(),
     ok;
 end_per_testcase(_Case, _Config) ->
@@ -60,7 +61,8 @@ basic_group() ->
        send_recv_confirm,
        rpc,
        kill_publisher,
-       kill_service
+       kill_service,
+       faulty_service
    ]}].
 
 groups() ->
@@ -251,6 +253,56 @@ send_recv(_Config) ->
     {ok, _SLvals} = exometer:get_value([amqp_server, local_service, latency]),
     ok.
 
+faulty_service(_Config) ->
+    random:seed(),
+    X = <<"send_recv_exchange">>,
+    Q = <<"send_recv_queue">>,
+    
+    ct:log("Add a faulty subscriber, consuming on Q"),
+    Self = self(),
+    F = fun
+        (_Key, _ContentType, <<"Fail">>, _State) -> error(fail);
+        (Key, ContentType, Payload, _State) ->
+            Self ! {Key, ContentType, Payload},
+            ack
+    end,
+    
+    {ok, _ServicePid} = turtle_service:start_link(
+        #{
+            name => local_service,
+            connection => amqp_server,
+            function => F,
+            declarations =>
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
+            subscriber_count => 3,
+            prefetch_count => 5,
+            consume_queue => Q
+        }),
+
+    ct:log("Start a new publisher process"),
+    {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }]),
+
+    ct:log("Await the start of the publisher"),
+    gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
+    ct:log("Await the start of the service"),
+    gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+
+    ct:log("Publish some messages on the channel:"),
+    [
+        turtle:publish(local_publisher, X, Q, <<"text/plain">>, <<"Fail">>)
+        || _ <- lists:seq(1, 3)],
+    [
+        turtle:publish(local_publisher, X, Q, <<"text/plain">>, <<"The turtle and the hare">>)
+        || _ <- lists:seq(1, 7)],
+
+    ok = faulty_receive(7),
+    ok.
+
 kill_service(_Config) ->
     random:seed(),
     X = <<"send_recv_exchange">>,
@@ -403,3 +455,13 @@ rpc_worker_loop(K) ->
     {ok, _, <<"ctype">>, <<I:64/integer>>} =
         turtle:rpc_sync(local_publisher, X, Q, <<"ctype">>, <<I:64/integer>>),
     rpc_worker_loop(K-1).
+
+faulty_receive(0) -> ok;
+faulty_receive(N) ->
+    receive
+        {_, <<"text/plain">>, <<"The turtle and the hare">>} ->
+            ct:pal("Got message for N=~B", [N]),
+            faulty_receive(N-1)
+    after 15*1000 ->
+        ct:fail(subscription_timeout)
+    end.
