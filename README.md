@@ -66,6 +66,10 @@ this number may become better over time. It is unlikely to become worse.
 
 # Changes
 
+* *Version 1.5.2* — Introduce the ability for workers to `{stop, Reason, …}`, which allows
+  a worker to crash while simultaneously rejecting the messages it is processing. This
+  avoids destroying the message which is currently in the queue, while allowing you
+  to get back to an invariant state.
 * *Version 1.5.1* — Fix a bug in which a crash in the subscribers
   handler function could lead to unacked message leaks under moderate
   to high load.
@@ -357,7 +361,7 @@ written, but we have not had the need yet.
 The signature for the callback function is:
 
     loop(RoutingKey, ContentType, Payload, State) ->
-        {remove, State} | {reject, State}
+        {remove, State} | {reject, State} | {stop, Reason, State}
         | {ack, State'} | {reply, CType, Payload, State}
 
 The idea is that the `loop/4` function processes the message and
@@ -376,6 +380,10 @@ returns what should happen with the message:
   This correctly uses the reply-to queue and correlation ID of the
   AMQP message to make a reply back to the caller. Its intended use is
   in RPC messaging.
+* The `stop` return is used to crash the subscriber-worker somewhat gracefully.
+  It rejects the message as in `reject` but also stops the worker, so you can
+  get back to a safe invariant state. The supplied `Reason` becomes the exit reason
+  for the worker.
 
 If a message is received by the subscription process it doens't
 understand itself, it is forwarded to the `handle_info` function:

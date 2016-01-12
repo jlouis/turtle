@@ -106,6 +106,10 @@ handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
            ok = amqp_channel:cast(Channel,
            	#'basic.reject' { delivery_tag = Tag, requeue = false}),
            {noreply, State#state { invoke_state = IState2}};
+        {stop, Reason, IState2} ->
+            ok = amqp_channel:cast(Channel,
+            	#'basic.reject' { delivery_tag = Tag, requeue = true }),
+            {stop, Reason, State#state { invoke_state = IState2}};
         ok ->
            {noreply, State}
     catch
@@ -137,7 +141,7 @@ handle_info(Info, #state { handle_info = HandleInfo, invoke_state = IState } = S
 terminate(_, #state { consumer_tag = Tag, channel = Ch }) when is_pid(Ch) ->
     turtle:cancel(Ch, Tag),
     await_cancel_ok(),
-    %% Once we know we have cancellation, draing the queue of the remaining
+    %% Once we know we have cancellation, drain the queue of the remaining
     %% messages.
     drain_reject_messages(Ch),
     ok;    
@@ -171,6 +175,7 @@ handle_message(Fun, Key,
         {reject, IState2} -> {reject, IState2};
         remove -> {remove, IState};
         {remove, IState2} -> {remove, IState2};
+        {stop, Reason, IState2} -> {stop, Reason, IState2};
         ok -> ok
     end.
     
