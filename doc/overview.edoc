@@ -1,7 +1,7 @@
 @author Jesper Louis Andersen <jesper.louis.andersen@gmail.com>
 @copyright 2015 Shopgun Aps
 @title turtle - Convenience wrapper for rabbitmq-erlang-client
-@version 1.5.2
+@version 1.5.3
 
 @doc
 

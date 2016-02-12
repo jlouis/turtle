@@ -56,7 +56,7 @@ start_link(#{ name := Name } = Conf) ->
 child_spec(#{ name := Name } = Conf) ->
     validate_config(Conf),
     {Name, {?MODULE, start_link, [Conf]},
-       transient, infinity, supervisor, [?MODULE]}.
+       permanent, infinity, supervisor, [?MODULE]}.
 
 %%====================================================================
 %% Supervisor callbacks
@@ -72,7 +72,7 @@ init([#{ name := Name } = Conf]) ->
     Pool =
         {pool,
             {turtle_subscriber_pool, start_link, [Name]},
-            transient, infinity, supervisor, [turtle_subscriber_pool]},
+            permanent, infinity, supervisor, [turtle_subscriber_pool]},
     {ok, { { one_for_all, 5, 3600}, [ChanMgr, Pool]}}.
     
 validate_config(#{
