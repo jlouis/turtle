@@ -66,6 +66,10 @@ this number may become better over time. It is unlikely to become worse.
 
 # Changes
 
+* *Version 1.6.0* — Feature release. There is a number of new features:
+
+    - Support updating of service/consumer configuration while the system is running. This has been provided by MakeMeFree/m2f.
+
 * *Version 1.5.3* — Fix a robustness problem with the supervisor tree. If the worker pools failed too often, the system would fail to escalate the error upwards through the supervisor trees. Key supervisors were erroneously declared as `transient` where they should have been declared as `permanent`.
 * *Version 1.5.2* — Introduce the ability for workers to `{stop, Reason, …}`, which allows
   a worker to crash while simultaneously rejecting the messages it is processing. This
