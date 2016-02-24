@@ -9,6 +9,8 @@
 %% API
 -export([start_link/1]).
 -export([add_subscriber/2]).
+-export([get_children/1]).
+-export([stop_child/2]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -24,6 +26,12 @@ start_link(Name) ->
 
 add_subscriber(Pool, Config) ->
     supervisor:start_child(Pool, [Config]).
+
+get_children(Pool)->
+    supervisor:which_children(Pool).
+
+stop_child(Pool, WorkerPid) ->
+    supervisor:terminate_child(Pool, WorkerPid).
 
 %%====================================================================
 %% Supervisor callbacks

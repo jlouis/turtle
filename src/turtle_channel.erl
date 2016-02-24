@@ -12,6 +12,7 @@
 
 %% API
 -export([
+    update_configuration/2
 ]).
 
 -export([
@@ -39,7 +40,17 @@
 start_link(Configuration) ->
     MergedConf = maps:merge(?DEFAULT_CONFIGURATION, Configuration),
     gen_server:start_link(?MODULE, [MergedConf], []).
-	
+
+%% API
+%% ----------------------------------------------------------
+    update_configuration(ServiceName, Config)->
+        Pid = where(ServiceName),
+        gen_server:call(Pid, {config_update, ServiceName, Config}, 20*1000).
+
+
+where(ChannelName) ->
+    gproc:where({n,l,{turtle, service_channel, ChannelName}}).
+
 %% CALLBACKS
 %% -------------------------------------------------------------------
 
@@ -51,6 +62,26 @@ init([#{ connection := ConnName } = Conf]) ->
     {ok, {initializing, Ref, Conf}}.
 
 %% @private
+handle_call({config_update, PoolName, Config}, From, #state{channel = Channel} = State) ->
+    ok = validate_config(Config),
+    #{name := Name,
+      connection := ConnName,
+      declarations := Decls,
+      function := _Fun,
+      consume_queue := _Queue,
+      subscriber_count := K,
+      passive := Passive} = Config,
+    Pool = gproc:where({n,l,{turtle,service_pool, PoolName}}),
+    Workers = turtle_subscriber_pool:get_children(Pool),
+    lists:foreach(fun({_, WorkerPid, _, _}) ->
+                          ok = turtle_subscriber_pool:stop_child(Pool, WorkerPid)
+                  end, Workers),
+
+    % Apply new configuration changes.
+    ok = turtle:qos(Channel, Config),
+    ok = turtle:declare(Channel, Decls, #{ passive => Passive }),
+    add_subscribers(Pool, Config#{ channel => Channel}, K),
+    {reply, ok, State#state{conf = Config}};
 handle_call(Call, From, State) ->
     lager:warning("Unknown call from ~p: ~p", [From, Call]),
     {reply, {error, unknown_call}, State}.

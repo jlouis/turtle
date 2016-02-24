@@ -314,5 +314,11 @@ declare(Channel, [#'queue.declare' {} = Queue | Ds], #{ passive := true } = Opts
     declare(Channel, Ds, Opts);
 declare(Channel, [#'queue.bind' {} = Queue | Ds], Opts) ->
     #'queue.bind_ok'{} = amqp_channel:call(Channel, Queue),
+    declare(Channel, Ds, Opts);
+declare(Channel, [#'queue.unbind' {} = Queue | Ds], Opts) ->
+    #'queue.unbind_ok'{} = amqp_channel:call(Channel, Queue),
+    declare(Channel, Ds, Opts);
+declare(Channel, [#'exchange.bind'{} = Exch | Ds], Opts) ->
+    #'exchange.bind_ok'{} = amqp_channel:call(Channel, Exch),
     declare(Channel, Ds, Opts).
 
