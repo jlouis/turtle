@@ -183,4 +183,15 @@ group_report(#conn_group { attempts = A, next = [{Nm, _} | _] = Next }) ->
     [{cursor, Nm}, {attempts, A}, {can_continue, [N || {N, _} <- Next] }].
 
 group_init(#{ connections := Cs }) ->
-    #conn_group { orig = Cs, attempts = ?DEFAULT_ATTEMPT_COUNT, next = [] }.
+    #conn_group {
+        orig = canonicalize_connections(Cs),
+        attempts = ?DEFAULT_ATTEMPT_COUNT,
+        next = [] }.
+
+canonicalize_connections(Cs) ->
+    C = fun
+        ({Host, Port}) when is_integer(Port) -> {Host, Port};
+        ({Host, Port}) when is_list(Port) -> {Host, list_to_integer(Port)}
+    end,
+    F = fun({Name, HPs}) -> {Name, [C(HP) || HP <- HPs]} end,
+    [F(Part) || Part <- Cs].
