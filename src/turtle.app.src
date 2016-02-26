@@ -6,6 +6,7 @@
   {applications,
    [kernel,
     stdlib,
+    xmerl,
 
     amqp_client,
     exometer_core,
