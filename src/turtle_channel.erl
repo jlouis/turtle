@@ -55,9 +55,11 @@ where(ChannelName) ->
 %% -------------------------------------------------------------------
 
 %% @private
-init([#{ connection := ConnName } = Conf]) ->
+init([#{ connection := ConnName, name := Name } = Conf]) ->
     ok = validate_config(Conf),
     Ref = gproc:nb_wait({n,l,{turtle, connection, ConnName}}),
+    ok = exometer:ensure([ConnName, Name, msgs], spiral, []),
+    ok = exometer:ensure([ConnName, Name, latency], histogram, []),
     process_flag(trap_exit, true),
     {ok, {initializing, Ref, Conf}}.
 

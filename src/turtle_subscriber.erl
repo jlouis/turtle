@@ -55,8 +55,6 @@ init([#{
     process_flag(trap_exit, true),
     {ok, Tag} = turtle:consume(Channel, Queue),
     MRef = monitor(process, Channel),
-    ok = exometer:ensure([ConnName, Name, msgs], spiral, []),
-    ok = exometer:ensure([ConnName, Name, latency], histogram, []),
     {ok, #state {
         consumer_tag = Tag, 
         invoke = Fun,

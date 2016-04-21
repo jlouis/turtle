@@ -66,6 +66,8 @@ this number may become better over time. It is unlikely to become worse.
 
 # Changes
 
+* *Version 1.6.1* — Make exometer probes known earlier in the connection cycle.
+
 * *Version 1.6.0* — Feature release. There is a number of new features:
 
     - Support updating of service/consumer configuration while the system is running. This has been provided by MakeMeFree/m2f.
