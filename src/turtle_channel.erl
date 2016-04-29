@@ -64,10 +64,10 @@ init([#{ connection := ConnName, name := Name } = Conf]) ->
     {ok, {initializing, Ref, Conf}}.
 
 %% @private
-handle_call({config_update, PoolName, Config}, From, #state{channel = Channel} = State) ->
+handle_call({config_update, PoolName, Config}, _From, #state{channel = Channel} = State) ->
     ok = validate_config(Config),
-    #{name := Name,
-      connection := ConnName,
+    #{name := _Name,
+      connection := _ConnName,
       declarations := Decls,
       function := _Fun,
       consume_queue := _Queue,

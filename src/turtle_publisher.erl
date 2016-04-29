@@ -6,7 +6,10 @@
 
 %% Lifetime
 -export([
-	start_link/3, start_link/4, where/1, child_spec/4
+	start_link/3,
+    start_link/4,
+    where/1,
+    child_spec/4
 ]).
 
 %% API
@@ -14,7 +17,8 @@
 	publish/6,
 	publish_sync/6,
 	rpc_call/6,
-	rpc_cancel/2
+	rpc_cancel/2,
+    update_configuration/4
 ]).
 
 -export([
@@ -89,6 +93,18 @@ start_link(Name, Connection, Declarations, InOptions) ->
     gen_server:start_link(?MODULE,
     	[Name, Connection, Options#{ declarations := Declarations }], []).
 
+%% @doc
+%% This variant of publisher dynamically updates configuration of
+%% an existing publisher without downtime. It starts a publisher, looks up for
+%% the owner of `Name' and notifies the old publisher. The old publisher gives away control to
+%% new publisher and closes down
+%% @end
+start_link(takeover, Name, Connection, Declarations, InOptions) ->
+    Options = maps:merge(?DEFAULT_OPTIONS, InOptions),
+    gen_server:start_link(?MODULE, [{takeover, Name}, Connection,
+                                    Options#{declarations := Declarations }], []).
+
+
 %% @doc where/1 returns what `Pid' a publisher is currently running under
 %% @end
 where(N) ->
@@ -125,10 +141,18 @@ rpc_call(Publisher, Exch, Key, ContentType, Payload, Opts) ->
 rpc_cancel(Publisher, Opaque) ->
     gen_server:call(where(Publisher), {rpc_cancel, Opaque}).
 
+update_configuration(Name, Connection, Decls, InOpts) ->
+    start_link(takeover, Name, Connection, Decls, InOpts).
+
 %% CALLBACKS
 %% -------------------------------------------------------------------
 
 %% @private
+init([{takeover, Name}, ConnName, Options]) ->
+    process_flag(trap_exit, true),
+    Ref = gproc:nb_wait({n,l,{turtle,connection, ConnName}}),
+    ok = exometer:ensure([ConnName, Name, casts], spiral, []),
+    {ok, {initializing_takeover, Name, Ref, ConnName, Options}};
 init([Name, ConnName, Options]) ->
     %% Initialize the system in the {initializing,...} state and await the presence of
     %% a connection under the given name without blocking the process. We replace
@@ -141,14 +165,20 @@ init([Name, ConnName, Options]) ->
 %% @private
 handle_call(_Pub, _From, {initializing, _, _, _, _} = Init) ->
     {reply, {error, initializing}, Init};
+handle_call(_Pub, _From, {initializing_takeover, _, _, _, _} = Init) ->
+    {reply, {error, initializing_takeover}, Init};
 handle_call({Kind, {publish, Pub, Props, Payload}}, From,
 	#state {conn_name = ConnName, name = Name } = InState) ->
-
     Res =  publish({Kind, From}, Pub, #amqp_msg { props = Props, payload = Payload }, InState),
     exometer:update([ConnName, Name, Kind], 1),
     Res;
 handle_call({rpc_cancel, {_Pid, CorrID}}, _From, #state { in_flight = IF } = State) ->
     {reply, ok, State#state { in_flight = track_cancel(CorrID, IF) }};
+handle_call({transfer_ownership, Pid}, _From, #state{name = Name} = State) ->
+    PubKey = {n,l,{turtle,publisher,Name}},
+    gproc:give_away(PubKey, Pid),
+    gproc:goodbye(),
+    {stop, normal, ok, State};
 handle_call(Call, From, State) ->
     lager:warning("Unknown call from ~p: ~p", [From, Call]),
     {reply, {error, unknown_call}, State}.
@@ -158,6 +188,9 @@ handle_cast(Pub, {initializing, _, _, _, _} = Init) ->
     %% Messages cast to an initializing publisher are thrown away, but it shouldn't
     %% happen, so we log them
     lager:warning("Publish while initializing: ~p", [Pub]),
+    {noreply, Init};
+handle_cast(Pub, {initializing_takeover, _, _, _, _} = Init) ->
+    lager:warning("Publish while takeover initialization: ~p", [Pub]),
     {noreply, Init};
 handle_cast({publish, Pub, Props, Payload},
 	#state { conn_name = ConnName, name = Name } = InState) ->
@@ -184,6 +217,32 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, N, Ref, CName,
     ConnMRef = monitor(process, Pid),
     ChanMRef = monitor(process, Channel),
     reg(N),
+    {noreply,
+      #state {
+        channel = Channel,
+        channel_ref = ChanMRef,
+        conn_ref = ConnMRef,
+        conn_name = CName,
+        confirms = Confirms,
+        corr_id = 0,
+        reply_queue = ReplyQueue,
+        consumer_tag = Tag,
+        name = N}};
+handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing_takeover, N, Ref, CName, Options}) ->
+    {ok, Channel} = turtle:open_channel(CName),
+    #{ declarations := Decls, passive := Passive, confirms := Confirms} = Options,
+    ok = turtle:declare(Channel, Decls, #{ passive => Passive }),
+    ok = turtle:qos(Channel, Options),
+    ok = handle_confirms(Channel, Options),
+    {ok, ReplyQueue, Tag} = handle_rpc(Channel, Options),
+    ConnMRef = monitor(process, Pid),
+    ChanMRef = monitor(process, Channel),
+    case where(N) of
+        undefined ->
+            reg(N);
+        ExistingOwner ->
+            gen_server:call(ExistingOwner, {transfer_ownership, self()})
+    end,
     {noreply,
       #state {
         channel = Channel,
