@@ -123,6 +123,11 @@ handle_info(connect,
             lager:warning("Timeout while connecting to RabbitMQ, retrying in ~Bs: ~p",
                 [Retry div 1000, group_report(CG)]),
             erlang:send_after(Retry, self(), connect),
+            {noreply, NextState};
+        {error, Reason, #state { cg = CG } = NextState} ->
+            lager:warning("Error connecting to RabbitMQ, reason: ~p, retrying in ~Bs: ~p",
+                [Reason, Retry div 1000, group_report(CG)]),
+            erlang:send_after(Retry, self(), connect),
             {noreply, NextState}
     end;
 handle_info(_, State) ->
