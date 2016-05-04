@@ -35,7 +35,8 @@
 	channel,
 	channel_ref,
 	consumer_tag,
-	mode = single
+	mode = single,
+	timeout = infinity
  }).
 
 %% LIFETIME MAINTENANCE
@@ -62,6 +63,7 @@ init([#{
     {ok, Tag} = turtle:consume(Ch, Queue),
     MRef = monitor(process, Ch),
     Mode = mode(Conf),
+    Timeout = timeout(Conf),
     {ok, #state {
         consumer_tag = Tag, 
         invoke = Fun,
@@ -71,7 +73,8 @@ init([#{
         channel_ref = MRef,
         conn_name = ConnName,
         name = Name,
-        mode = Mode }}.
+        mode = Mode,
+        timeout = Timeout }}.
 
 %% @private
 handle_call(Call, From, State) ->
@@ -139,14 +142,33 @@ code_change(_, State, _) ->
 %% INTERNAL FUNCTIONS
 %%
 
-handle_deliver_bulk(_, _) -> todo.
+handle_deliver_bulk({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
+	#state {
+	  invoke = Fun, invoke_state = IState,
+	  channel = Channel,
+	  conn_name = CN,
+	  name = N,
+	  timeout = Timeout } = State) ->
+    S = turtle_time:monotonic_time(),
+    try handle_message(Tag, Fun, Key, Content, IState, Channel) of
+        {ok, S2} ->
+            {noreply, State#state { invoke_state = S2 }}
+    catch
+        Class:Error ->
+           lager:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
+               [Class, Error, erlang:get_stacktrace(), format_amqp_msg(Content)]),
+           lager:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
+           ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false }),
+           {stop, {Class, Error}, State}
+    end.
+        
 
 handle_deliver_single({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
 	#state {
 	  invoke = Fun, invoke_state = IState,
 	  channel = Channel, conn_name = CN, name = N } = State) ->
     S = turtle_time:monotonic_time(),
-    try handle_message(Fun, Key, Content, IState, Channel) of
+    try handle_message(undefined, Fun, Key, Content, IState, Channel) of
         {ack, IState2} ->
            E = turtle_time:monotonic_time(),
            exometer:update([CN, N, msgs], 1),
@@ -168,8 +190,8 @@ handle_deliver_single({#'basic.deliver' {delivery_tag = Tag, routing_key = Key},
             ok = amqp_channel:cast(Channel,
             	#'basic.reject' { delivery_tag = Tag, requeue = true }),
             {stop, Reason, State#state { invoke_state = IState2}};
-        ok ->
-           {noreply, State}
+        {ok, IState2} ->
+           {noreply, State#state { invoke_state = IState2}}
     catch
         Class:Error ->
            lager:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
@@ -177,15 +199,22 @@ handle_deliver_single({#'basic.deliver' {delivery_tag = Tag, routing_key = Key},
            lager:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
            ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false }),
            {stop, {Class, Error}, State}
-    end;
-handle_message(Fun, Key,
+    end.
+
+handle_message(Tag, Fun, Key,
 	#amqp_msg {
 	    payload = Payload,
 	    props = #'P_basic' {
 	        content_type = Type,
 	        correlation_id = CorrID,
 	        reply_to = ReplyTo }}, IState, Channel) ->
-    case Fun(Key, Type, Payload, IState) of
+    Res = case Tag of
+        undefined -> Fun(Key, Type, Payload, IState);
+        Tag -> Fun(Key, Type, Payload, Tag, IState)
+    end,
+    case Res of
+        L when is_list(L) -> {L, IState};
+        {L, IState2} when is_list(L) -> {L, IState2};
         ack -> {ack, IState};
         {ack, IState2} -> {ack, IState2};
         {reply, CType, Msg} ->
@@ -199,7 +228,8 @@ handle_message(Fun, Key,
         remove -> {remove, IState};
         {remove, IState2} -> {remove, IState2};
         {stop, Reason, IState2} -> {stop, Reason, IState2};
-        ok -> ok
+        {ok, IState2} -> {ok, IState2};
+        ok -> {ok, IState}
     end.
     
 format_amqp_msg(#amqp_msg { payload = Payload, props = Props }) ->
@@ -252,3 +282,6 @@ drain_reject_messages(Channel) ->
 mode(#{ mode := bulk }) -> bulk;
 mode(#{ mode := single }) -> single;
 mode(#{}) -> single.
+
+timeout(#{ timeout := Ms }) -> Ms;
+timeout(#{}) -> infinity.
