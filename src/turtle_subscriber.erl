@@ -82,9 +82,9 @@ handle_call(Call, From, State) ->
     {reply, {error, unknown_call}, State}.
 
 %% @private
-handle_cast(Cast, State) ->
+handle_cast(Cast, #state { timeout = T } = State) ->
     lager:warning("Unknown cast: ~p", [Cast]),
-    {noreply, State}.
+    {noreply, State, T}.
 
 %% @private
 handle_info(#'basic.consume_ok'{}, State) ->
@@ -189,7 +189,8 @@ handle_deliver_single({#'basic.deliver' {delivery_tag = Tag, routing_key = Key},
            {stop, {Class, Error}, State}
     end.
 
-handle_commands(_S, [], State) -> {noreply, State};
+handle_commands(_S, [], #state { timeout = T } = State) ->
+    {noreply, State, T};
 handle_commands(S, [C | Next],
 	#state { channel = Channel, conn_name = CN, name = N } = State) ->
     case C of
