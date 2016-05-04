@@ -34,7 +34,8 @@
 	handle_info = undefined,
 	channel,
 	channel_ref,
-	consumer_tag
+	consumer_tag,
+	mode = single
  }).
 
 %% LIFETIME MAINTENANCE
@@ -60,6 +61,7 @@ init([#{
     ok = turtle:declare(Ch, Decls, #{ passive => Passive }),
     {ok, Tag} = turtle:consume(Ch, Queue),
     MRef = monitor(process, Ch),
+    Mode = mode(Conf),
     {ok, #state {
         consumer_tag = Tag, 
         invoke = Fun,
@@ -68,7 +70,8 @@ init([#{
         channel = Ch,
         channel_ref = MRef,
         conn_name = ConnName,
-        name = Name }}.
+        name = Name,
+        mode = Mode }}.
 
 %% @private
 handle_call(Call, From, State) ->
@@ -238,3 +241,7 @@ drain_reject_messages(Channel) ->
     after 0 ->
         ok
     end.
+
+mode(#{ mode := bulk }) -> bulk;
+mode(#{ mode := single }) -> single;
+mode(#{}) -> single.

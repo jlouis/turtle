@@ -84,7 +84,7 @@ validate_config(#{
 	declarations := Decls,
 	subscriber_count := SC,
 	prefetch_count := PC,
-	consume_queue := Q })
+	consume_queue := Q } = Conf)
     when
       is_atom(N),
       is_atom(C),
@@ -94,5 +94,7 @@ validate_config(#{
       is_integer(SC), SC > 0,
       is_integer(PC), PC >= 0,
       is_binary(Q) ->
-      	ok.
+      	mode_ok(Conf).
 
+mode_ok(#{ mode := Mode }) when Mode == bulk; Mode == single -> ok;
+mode_ok(#{}) -> ok.
