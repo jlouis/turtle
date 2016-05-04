@@ -147,12 +147,17 @@ handle_deliver_bulk({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, C
 	  invoke = Fun, invoke_state = IState,
 	  channel = Channel,
 	  conn_name = CN,
-	  name = N,
-	  timeout = Timeout } = State) ->
+	  name = N } = State) ->
     S = turtle_time:monotonic_time(),
     try handle_message(Tag, Fun, Key, Content, IState, Channel) of
-        {ok, S2} ->
-            {noreply, State#state { invoke_state = S2 }}
+        {[], S2} ->
+            E = turtle_time:monotonic_time(),
+            exometer:update([CN, N, msgs], 1),
+            exometer:update([CN, N, latency],
+                turtle_time:convert_time_unit(E-S, native, milli_seconds)),
+            {noreply, State#state { invoke_state = S2 }};
+        {Cmds, S2} when is_list(Cmds) ->
+            handle_commands(S, Cmds, State#state { invoke_state = S2 })
     catch
         Class:Error ->
            lager:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
@@ -162,36 +167,19 @@ handle_deliver_bulk({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, C
            {stop, {Class, Error}, State}
     end.
         
-
 handle_deliver_single({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
-	#state {
-	  invoke = Fun, invoke_state = IState,
-	  channel = Channel, conn_name = CN, name = N } = State) ->
+	#state { invoke = Fun, invoke_state = IState,channel = Channel } = State) ->
     S = turtle_time:monotonic_time(),
-    try handle_message(undefined, Fun, Key, Content, IState, Channel) of
-        {ack, IState2} ->
-           E = turtle_time:monotonic_time(),
-           exometer:update([CN, N, msgs], 1),
-           exometer:update([CN, N, latency],
-             turtle_time:convert_time_unit(E-S, native, milli_seconds)),
-           ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag }),
-           {noreply, State#state { invoke_state = IState2 }};
-        {reject, IState2} ->
-           exometer:update([CN, N, rejects], 1),
-           ok = amqp_channel:cast(Channel,
-           	#'basic.reject' { delivery_tag = Tag, requeue=true }),
-           {noreply, State#state { invoke_state = IState2}};
-        {remove, IState2} ->
-           exometer:update([CN, N, removals], 1),
-           ok = amqp_channel:cast(Channel,
-           	#'basic.reject' { delivery_tag = Tag, requeue = false}),
-           {noreply, State#state { invoke_state = IState2}};
-        {stop, Reason, IState2} ->
-            ok = amqp_channel:cast(Channel,
-            	#'basic.reject' { delivery_tag = Tag, requeue = true }),
-            {stop, Reason, State#state { invoke_state = IState2}};
-        {ok, IState2} ->
-           {noreply, State#state { invoke_state = IState2}}
+    try
+        %% Transform a single message into the style of bulk messages
+        {Cmds, S2} = case handle_message(undefined, Fun, Key, Content, IState, Channel) of
+            {ack, IState2} -> {[{ack, Tag}], IState2};
+            {reject, IState2} -> {[{reject, Tag}], IState2};
+            {remove, IState2} -> {[{remove, Tag}], IState2};
+            {stop, Reason, IState2} -> {[{{stop, Reason}, Tag}], IState2};
+            {ok, IState2} -> {[], IState2}
+        end,
+        handle_commands(S, Cmds, State#state { invoke_state = S2 })
     catch
         Class:Error ->
            lager:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
@@ -199,6 +187,33 @@ handle_deliver_single({#'basic.deliver' {delivery_tag = Tag, routing_key = Key},
            lager:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
            ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false }),
            {stop, {Class, Error}, State}
+    end.
+
+handle_commands(_S, [], State) -> {noreply, State};
+handle_commands(S, [C | Next],
+	#state { channel = Channel, conn_name = CN, name = N } = State) ->
+    case C of
+        {ack, Tag} ->
+            E = turtle_time:monotonic_time(),
+            exometer:update([CN, N, msgs], 1),
+            exometer:update([CN, N, latency],
+                turtle_time:convert_time_unit(E-S, native, milli_seconds)),
+           ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag }),
+           handle_commands(S, Next, State);
+       {reject, Tag} ->
+           exometer:update([CN, N, rejects], 1),
+           ok = amqp_channel:cast(Channel,
+           	#'basic.reject' { delivery_tag = Tag, requeue=true }),
+           handle_commands(S, Next, State);
+        {remove, Tag} ->
+           exometer:update([CN, N, removals], 1),
+           ok = amqp_channel:cast(Channel,
+           	#'basic.reject' { delivery_tag = Tag, requeue = false}),
+           handle_commands(S, Next, State);
+        {{stop, Reason}, Tag} ->
+            ok = amqp_channel:cast(Channel,
+            	#'basic.reject' { delivery_tag = Tag, requeue = true }),
+            {stop, Reason, State}
     end.
 
 handle_message(Tag, Fun, Key,
@@ -213,8 +228,11 @@ handle_message(Tag, Fun, Key,
         Tag -> Fun(Key, Type, Payload, Tag, IState)
     end,
     case Res of
+        %% Bulk messages
         L when is_list(L) -> {L, IState};
         {L, IState2} when is_list(L) -> {L, IState2};
+        
+        %% Single messages
         ack -> {ack, IState};
         {ack, IState2} -> {ack, IState2};
         {reply, CType, Msg} ->
