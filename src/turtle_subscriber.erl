@@ -89,43 +89,10 @@ handle_info(#'basic.consume_ok'{}, State) ->
 handle_info(#'basic.cancel_ok'{}, State) ->
     lager:info("Consumption canceled"),
     {stop, normal, State};
-handle_info({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
-	#state {
-	  invoke = Fun, invoke_state = IState,
-	  channel = Channel, conn_name = CN, name = N } = State) ->
-    S = turtle_time:monotonic_time(),
-    try handle_message(Fun, Key, Content, IState, Channel) of
-        {ack, IState2} ->
-           E = turtle_time:monotonic_time(),
-           exometer:update([CN, N, msgs], 1),
-           exometer:update([CN, N, latency],
-             turtle_time:convert_time_unit(E-S, native, milli_seconds)),
-           ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag }),
-           {noreply, State#state { invoke_state = IState2 }};
-        {reject, IState2} ->
-           exometer:update([CN, N, rejects], 1),
-           ok = amqp_channel:cast(Channel,
-           	#'basic.reject' { delivery_tag = Tag, requeue=true }),
-           {noreply, State#state { invoke_state = IState2}};
-        {remove, IState2} ->
-           exometer:update([CN, N, removals], 1),
-           ok = amqp_channel:cast(Channel,
-           	#'basic.reject' { delivery_tag = Tag, requeue = false}),
-           {noreply, State#state { invoke_state = IState2}};
-        {stop, Reason, IState2} ->
-            ok = amqp_channel:cast(Channel,
-            	#'basic.reject' { delivery_tag = Tag, requeue = true }),
-            {stop, Reason, State#state { invoke_state = IState2}};
-        ok ->
-           {noreply, State}
-    catch
-        Class:Error ->
-           lager:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
-               [Class, Error, erlang:get_stacktrace(), format_amqp_msg(Content)]),
-           lager:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
-           ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false }),
-           {stop, {Class, Error}, State}
-    end;
+handle_info({#'basic.deliver'{}, _Content} = Msg, #state { mode = single } = State) ->
+    handle_deliver_single(Msg, State);
+handle_info({#'basic.deliver'{}, _Content} = Msg, #state { mode = bulk } = State) ->
+    handle_deliver_bulk(Msg, State);
 handle_info({'DOWN', MRef, process, _, normal}, #state { channel_ref = MRef } = State) ->
     {stop, normal, State#state { channel = none }};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { channel_ref = MRef } = State) ->
@@ -171,6 +138,46 @@ code_change(_, State, _) ->
 %%
 %% INTERNAL FUNCTIONS
 %%
+
+handle_deliver_bulk(_, _) -> todo.
+
+handle_deliver_single({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
+	#state {
+	  invoke = Fun, invoke_state = IState,
+	  channel = Channel, conn_name = CN, name = N } = State) ->
+    S = turtle_time:monotonic_time(),
+    try handle_message(Fun, Key, Content, IState, Channel) of
+        {ack, IState2} ->
+           E = turtle_time:monotonic_time(),
+           exometer:update([CN, N, msgs], 1),
+           exometer:update([CN, N, latency],
+             turtle_time:convert_time_unit(E-S, native, milli_seconds)),
+           ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag }),
+           {noreply, State#state { invoke_state = IState2 }};
+        {reject, IState2} ->
+           exometer:update([CN, N, rejects], 1),
+           ok = amqp_channel:cast(Channel,
+           	#'basic.reject' { delivery_tag = Tag, requeue=true }),
+           {noreply, State#state { invoke_state = IState2}};
+        {remove, IState2} ->
+           exometer:update([CN, N, removals], 1),
+           ok = amqp_channel:cast(Channel,
+           	#'basic.reject' { delivery_tag = Tag, requeue = false}),
+           {noreply, State#state { invoke_state = IState2}};
+        {stop, Reason, IState2} ->
+            ok = amqp_channel:cast(Channel,
+            	#'basic.reject' { delivery_tag = Tag, requeue = true }),
+            {stop, Reason, State#state { invoke_state = IState2}};
+        ok ->
+           {noreply, State}
+    catch
+        Class:Error ->
+           lager:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
+               [Class, Error, erlang:get_stacktrace(), format_amqp_msg(Content)]),
+           lager:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
+           ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false }),
+           {stop, {Class, Error}, State}
+    end;
 handle_message(Fun, Key,
 	#amqp_msg {
 	    payload = Payload,
