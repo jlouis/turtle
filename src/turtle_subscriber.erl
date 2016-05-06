@@ -201,6 +201,13 @@ handle_commands(S, [C | Next],
                 turtle_time:convert_time_unit(E-S, native, milli_seconds)),
            ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag }),
            handle_commands(S, Next, State);
+       {bulk_ack, Tag} ->
+            E = turtle_time:monotonic_time(),
+            exometer:update([CN, N, msgs], 1),
+            exometer:update([CN, N, latency],
+                turtle_time:convert_time_unit(E-S, native, milli_seconds)),
+           ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag, multiple = true }),
+           handle_commands(S, Next, State);
        {reject, Tag} ->
            exometer:update([CN, N, rejects], 1),
            ok = amqp_channel:cast(Channel,
