@@ -1,7 +1,7 @@
 %%% @doc Manage an AMQP channel
 %%% @end
 %% @private
--module(turtle_channel).
+-module(turtle_service_mgr).
 -behaviour(gen_server).
 -include_lib("amqp_client/include/amqp_client.hrl").
 

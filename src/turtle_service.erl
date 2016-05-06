@@ -67,8 +67,8 @@ child_spec(#{ name := Name } = Conf) ->
 init([#{ name := Name } = Conf]) ->
     ChanMgr =
         {channel,
-            {turtle_channel, start_link, [Conf]},
-            permanent, 3000, worker, [turtle_channel]},
+            {turtle_service_mgr, start_link, [Conf]},
+            permanent, 3000, worker, [turtle_service_mgr]},
     Pool =
         {pool,
             {turtle_subscriber_pool, start_link, [Name]},
