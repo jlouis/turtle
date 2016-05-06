@@ -66,7 +66,7 @@ this number may become better over time. It is unlikely to become worse.
 
 # Changes
 
-* *Version 1.6.2 (In Progress) — Maintenance release
+* *Version 1.6.2* — Maintenance release
 
     - (Tim Stewart) Support more error cases in the connection loop. Tim has seen problems with the connection process on Docker instances, and retrying seem to make the trouble go away. The change also plugs the possibility of other connections failing.
     - (Sougat Chakraborty) Implementation towards dynamic publisher takeovers. This allows dynamic replacement of publishers with new publishers. In turn, one can manage a supervised child and replace it with newly updated configuration as time goes on.
