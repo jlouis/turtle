@@ -66,6 +66,10 @@ this number may become better over time. It is unlikely to become worse.
 
 # Changes
 
+* *Version 1.7.0* (**In progress**)— Refactoring of service channels
+
+    - Implement a change where `turtle_cannel` is renamed into `turtle_service_mgr` and draws no channels by itself. Rather, channels is now the domain of `turtle_subscriber`. This change moves the channel scope onto individual processes, which opens the design space for further improvement.
+
 * *Version 1.6.2* — Maintenance release
 
     - (Tim Stewart) Support more error cases in the connection loop. Tim has seen problems with the connection process on Docker instances, and retrying seem to make the trouble go away. The change also plugs the possibility of other connections failing.
