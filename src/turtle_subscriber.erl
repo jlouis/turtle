@@ -199,28 +199,35 @@ handle_commands(S, [C | Next],
             exometer:update([CN, N, msgs], 1),
             exometer:update([CN, N, latency],
                 turtle_time:convert_time_unit(E-S, native, milli_seconds)),
-           ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag }),
+           ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = delivery_tag(Tag) }),
            handle_commands(S, Next, State);
        {bulk_ack, Tag} ->
             E = turtle_time:monotonic_time(),
             exometer:update([CN, N, msgs], 1),
             exometer:update([CN, N, latency],
                 turtle_time:convert_time_unit(E-S, native, milli_seconds)),
-           ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = Tag, multiple = true }),
+           ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = delivery_tag(Tag), multiple = true }),
+           handle_commands(S, Next, State);
+       {bulk_nack, Tag} ->
+           E = turtle_time:monotic_time(),
+            exometer:update([CN, N, msgs], 1),
+            exometer:update([CN, N, latency],
+                turtle_time:convert_time_unit(E-S, native, milli_seconds)),
+           ok = amqp_channel:cast(Channel, #'basic.nack' { delivery_tag = delivery_tag(Tag), multiple = true }),
            handle_commands(S, Next, State);
        {reject, Tag} ->
            exometer:update([CN, N, rejects], 1),
            ok = amqp_channel:cast(Channel,
-           	#'basic.reject' { delivery_tag = Tag, requeue=true }),
+           	#'basic.reject' { delivery_tag = delivery_tag(Tag), requeue=true }),
            handle_commands(S, Next, State);
         {remove, Tag} ->
            exometer:update([CN, N, removals], 1),
            ok = amqp_channel:cast(Channel,
-           	#'basic.reject' { delivery_tag = Tag, requeue = false}),
+           	#'basic.reject' { delivery_tag = delivery_tag(Tag), requeue = false}),
            handle_commands(S, Next, State);
         {{stop, Reason}, Tag} ->
             ok = amqp_channel:cast(Channel,
-            	#'basic.reject' { delivery_tag = Tag, requeue = true }),
+            	#'basic.reject' { delivery_tag = delivery_tag(Tag), requeue = true }),
             {stop, Reason, State}
     end.
 
@@ -311,3 +318,6 @@ mode(#{}) -> single.
 
 timeout(#{ timeout := Ms }) -> Ms;
 timeout(#{}) -> infinity.
+
+%% Placeholder for later
+delivery_tag(Tag) -> Tag.
