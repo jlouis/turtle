@@ -67,8 +67,8 @@ basic_group() ->
 
 groups() ->
     lists:append([
-      lifetime_group(),
-      basic_group()
+       lifetime_group(),
+       basic_group()
     ]).
 
 all() -> [
@@ -333,9 +333,9 @@ kill_service(_Config) ->
     flush(),
     ct:log("Kill the connection, check that the service goes away"),
     _ConnPid = gproc:where({n,l,{turtle,connection, amqp_server}}),
-    ChanPid = gproc:where({n,l,{turtle,service_channel,local_service}}),
-    MRef = erlang:monitor(process, ChanPid),
-    true = (ChanPid /= undefined),
+    MgrPid = gproc:where({n,l,{turtle,service_channel,local_service}}),
+    MRef = erlang:monitor(process, MgrPid),
+    true = (MgrPid /= undefined),
     turtle_conn:close(amqp_server),
     receive
         {'DOWN', MRef, process, _, Reason} ->
@@ -356,8 +356,8 @@ kill_service(_Config) ->
     ct:log("Await the start of the publisher"),
     gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
     ct:log("Check that the process got restarted and re-registered itself"),
-    ChanPid2 = gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
-    true = ChanPid /= ChanPid2,
+    MgrPid2 = gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+    true = MgrPid /= MgrPid2,
 
     ct:log("Publish a message on the channel"),
     M = term_to_binary({msg, random:uniform(16#FFFF)}),

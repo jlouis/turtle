@@ -128,8 +128,8 @@ terminate(_, #state { consumer_tag = Tag, channel = Ch }) when is_pid(Ch) ->
     drain_reject_messages(Ch),
     %% Unregister and close the channel. If the channel is gone, this will fail, but
     %% this is not going to be a problem.
-    amqp_channel:unregister_return_handler(Ch),
-    amqp_channel:close(Ch),
+    ok = amqp_channel:unregister_return_handler(Ch),
+    ok = amqp_channel:close(Ch),
     ok;    
 terminate(_Reason, _State) ->
     ok.
@@ -142,14 +142,19 @@ code_change(_, State, _) ->
 %% INTERNAL FUNCTIONS
 %%
 
-handle_deliver_bulk({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
+handle_deliver_bulk({#'basic.deliver' {delivery_tag = DTag, routing_key = Key},
+	#amqp_msg {
+	    props = #'P_basic' {
+	        correlation_id = CorrID,
+	        reply_to = ReplyTo }} = Content},
 	#state {
 	  invoke = Fun, invoke_state = IState,
 	  channel = Channel,
 	  conn_name = CN,
 	  name = N } = State) ->
     S = turtle_time:monotonic_time(),
-    try handle_message(Tag, Fun, Key, Content, IState, Channel) of
+    Tag = {DTag, ReplyTo, CorrID},
+    try handle_message(Tag, Fun, Key, Content, IState) of
         {[], S2} ->
             E = turtle_time:monotonic_time(),
             exometer:update([CN, N, msgs], 1),
@@ -167,13 +172,21 @@ handle_deliver_bulk({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, C
            {stop, {Class, Error}, State}
     end.
         
-handle_deliver_single({#'basic.deliver' {delivery_tag = Tag, routing_key = Key}, Content},
+handle_deliver_single({#'basic.deliver' {delivery_tag = DTag, routing_key = Key},
+		#amqp_msg {
+	    props = #'P_basic' {
+	        correlation_id = CorrID,
+	        reply_to = ReplyTo }} = Content},
 	#state { invoke = Fun, invoke_state = IState,channel = Channel } = State) ->
     S = turtle_time:monotonic_time(),
+    Tag = {DTag, ReplyTo, CorrID},
     try
         %% Transform a single message into the style of bulk messages
-        {Cmds, S2} = case handle_message(undefined, Fun, Key, Content, IState, Channel) of
+        %% by temporarily inserting an empty tag
+        SingleTag = {undefined, ReplyTo, CorrID},
+        {Cmds, S2} = case handle_message(SingleTag, Fun, Key, Content, IState) of
             {ack, IState2} -> {[{ack, Tag}], IState2};
+            {reply, _Tag, CType, Msg, IState2} -> {[{reply, Tag, CType, Msg}], IState2};
             {reject, IState2} -> {[{reject, Tag}], IState2};
             {remove, IState2} -> {[{remove, Tag}], IState2};
             {stop, Reason, IState2} -> {[{{stop, Reason}, Tag}], IState2};
@@ -225,6 +238,15 @@ handle_commands(S, [C | Next],
            ok = amqp_channel:cast(Channel,
            	#'basic.reject' { delivery_tag = delivery_tag(Tag), requeue = false}),
            handle_commands(S, Next, State);
+        {reply, Tag, CType, Msg} ->
+            E = turtle_time:monotonic_time(),
+            exometer:update([CN, N, msgs], 1),
+            exometer:update([CN, N, latency],
+                turtle_time:convert_time_unit(E-S, native, milli_seconds)),
+           reply(Channel, Tag, CType, Msg),
+           ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = delivery_tag(Tag) }),
+           handle_commands(S, Next, State);
+
         {{stop, Reason}, Tag} ->
             ok = amqp_channel:cast(Channel,
             	#'basic.reject' { delivery_tag = delivery_tag(Tag), requeue = true }),
@@ -235,11 +257,9 @@ handle_message(Tag, Fun, Key,
 	#amqp_msg {
 	    payload = Payload,
 	    props = #'P_basic' {
-	        content_type = Type,
-	        correlation_id = CorrID,
-	        reply_to = ReplyTo }}, IState, Channel) ->
+	        content_type = Type }}, IState) ->
     Res = case Tag of
-        undefined -> Fun(Key, Type, Payload, IState);
+        {undefined, _, _} -> Fun(Key, Type, Payload, IState);
         Tag -> Fun(Key, Type, Payload, Tag, IState)
     end,
     case Res of
@@ -250,12 +270,8 @@ handle_message(Tag, Fun, Key,
         %% Single messages
         ack -> {ack, IState};
         {ack, IState2} -> {ack, IState2};
-        {reply, CType, Msg} ->
-            reply(Channel, CorrID, ReplyTo, CType, Msg),
-            {ack, IState};
-        {reply, CType, Msg, IState2} ->
-            reply(Channel, CorrID, ReplyTo, CType, Msg),
-            {ack, IState2};
+        {reply, CType, Msg} -> {reply, Tag, CType, Msg, IState};
+        {reply, CType, Msg, IState2} -> {reply, Tag, CType, Msg, IState2};
         reject -> {reject, IState};
         {reject, IState2} -> {reject, IState2};
         remove -> {remove, IState};
@@ -281,10 +297,10 @@ invoke_state(_) -> init.
 handle_info(#{ handle_info := Handler }) -> Handler;
 handle_info(_) -> undefined.
 
-reply(_Ch, _CorrID, undefined, _CType, _Msg) ->
+reply(_Ch, {_Tag, undefined, _CorrID}, _CType, _Msg) ->
     lager:warning("Replying to target with no reply-to queue defined"),
     ok;
-reply(Ch, CorrID, ReplyTo, CType, Msg) ->
+reply(Ch, {_Tag, ReplyTo, CorrID}, CType, Msg) ->
     Publish = #'basic.publish' {
         exchange = <<>>,
         routing_key = ReplyTo
@@ -297,7 +313,7 @@ await_cancel_ok() ->
     receive
        #'basic.cancel_ok'{} ->
            ok
-    after 5000 ->
+    after 500 ->
            lager:error("No basic.cancel_ok received"),
            not_cancelled
     end.
@@ -320,4 +336,4 @@ timeout(#{ timeout := Ms }) -> Ms;
 timeout(#{}) -> infinity.
 
 %% Placeholder for later
-delivery_tag(Tag) -> Tag.
+delivery_tag({Tag, _ReplyTo, _CorrID}) -> Tag.
