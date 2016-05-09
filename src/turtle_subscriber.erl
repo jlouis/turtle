@@ -91,15 +91,17 @@ handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 handle_info(#'basic.cancel_ok'{}, State) ->
     lager:info("Consumption canceled"),
-    {stop, normal, State};
+    {stop, normal, shutdown(rabbitmq_gone, State)};
 handle_info({#'basic.deliver'{}, _Content} = Msg, #state { mode = single } = State) ->
     handle_deliver_single(Msg, State);
 handle_info({#'basic.deliver'{}, _Content} = Msg, #state { mode = bulk } = State) ->
     handle_deliver_bulk(Msg, State);
 handle_info({'DOWN', MRef, process, _, normal}, #state { channel_ref = MRef } = State) ->
-    {stop, {channel_down, normal}, State#state { channel = none }};
+    {stop, {channel_down, normal},
+        shutdown(channel_down, State#state { channel = none })};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { channel_ref = MRef } = State) ->
-    {stop, {channel_down, Reason}, State#state { channel = none }};
+    {stop, {channel_down, Reason},
+        shutdown(channel_down, State#state { channel = none })};
 handle_info(#'basic.return' {} = Return, #state { name = Name } = State) ->
     lager:info("Channel ~p received a return from AMQP: ~p", [Name, Return]),
     {noreply, State};
@@ -107,8 +109,11 @@ handle_info(Info, #state { handle_info = undefined } = State) ->
     lager:warning("Unknown info message: ~p", [Info]),
     {noreply, State};
 handle_info(Info, #state { handle_info = HandleInfo, invoke_state = IState } = State) ->
+    S = turtle_time:monotonic_time(),
     try HandleInfo(Info, IState) of
-        {ok, IState2} -> {noreply, State#state { invoke_state = IState2 }}
+        {ok, IState2} -> {noreply, State#state { invoke_state = IState2 }};
+        {Cmds, IState2} when is_list(Cmds) ->
+            handle_commands(S, Cmds, State#state { invoke_state = IState2 })
     catch
         Class:Error ->
             lager:error("Handle info crashed: {~p, ~p}, stack: ~p",
@@ -250,7 +255,7 @@ handle_commands(S, [C | Next],
         {{stop, Reason}, Tag} ->
             ok = amqp_channel:cast(Channel,
             	#'basic.reject' { delivery_tag = delivery_tag(Tag), requeue = true }),
-            {stop, Reason, State}
+            {stop, Reason, shutdown(Reason, State)}
     end.
 
 handle_message(Tag, Fun, Key,
@@ -337,3 +342,31 @@ timeout(#{}) -> infinity.
 
 %% Placeholder for later
 delivery_tag({Tag, _ReplyTo, _CorrID}) -> Tag.
+
+shutdown(Reason, #state { handle_info = HandleInfo, invoke_state = IState } = State) ->
+    S = turtle_time:monotonic_time(),
+    try HandleInfo(Reason, IState) of
+        {ok, IState2} -> {noreply, State#state { invoke_state = IState2 }};
+        {Cmds, IState2} when is_list(Cmds) ->
+            {stop, Reason,
+               shutdown_process_commands(
+                   S,
+                   Cmds,
+                   State#state { invoke_state = IState2 },
+                   Reason)}
+    catch
+        Class:Error ->
+            lager:error("Handle info crashed: {~p, ~p}, stack: ~p",
+                [Class, Error, erlang:get_stacktrace()]),
+            {stop, {Class, Error}, State}
+    end.
+
+shutdown_process_commands(S, Cmds, State, normal) ->
+    handle_commands(S, Cmds, State);
+shutdown_process_commands(_S, [], State, _Reason) ->
+    State;
+shutdown_process_commands(_S, Cmds, State, Reason) ->
+    lager:warning("Ignoring ~B commands due to ungraceful shutdown: ~p",
+        [length(Cmds), Reason]),
+    State.
+
