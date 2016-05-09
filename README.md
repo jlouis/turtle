@@ -66,7 +66,11 @@ this number may become better over time. It is unlikely to become worse.
 
 # Changes
 
-* *Version 1.7.0* (**In progress**)— Refactoring of service channels
+* *Version 1.7.0* — Bulk messaging support
+
+    - *Potential incompatibility:* The `handle_info/2` callback when doing subscription services can now be called in more situations. Make sure your callback handle unknown messages by ignoring them. Otherwise your service may fail.
+    
+    - Add support for handling messages in bulk. See the appropriate section in the README file in order to use it.
 
     - Implement a change where `turtle_cannel` is renamed into `turtle_service_mgr` and draws no channels by itself. Rather, channels is now the domain of `turtle_subscriber`. This change moves the channel scope onto individual processes, which opens the design space for further improvement.
 
