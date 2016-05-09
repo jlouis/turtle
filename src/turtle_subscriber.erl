@@ -13,10 +13,6 @@
 	start_link/1
 ]).
 
-%% API
--export([
-]).
-
 -export([
     init/1,
     handle_call/3,
@@ -252,7 +248,7 @@ handle_commands(S, [C | Next],
         {{stop, Reason}, Tag} ->
             ok = amqp_channel:cast(Channel,
             	#'basic.reject' { delivery_tag = delivery_tag(Tag), requeue = true }),
-            {stop, Reason, shutdown(Reason, State)}
+            {stop, Reason, State}
     end.
 
 handle_message(Tag, Fun, Key,

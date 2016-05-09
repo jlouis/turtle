@@ -323,6 +323,14 @@ messages from RabbitMQ and processes them. In this setup, you provide
 a callback function to the turtle system and it invokes this function
 (in its own context) for each message that is received over RabbitMQ.
 
+Turtle supports two messaging modes: single and bulk. First we describe
+single-delivery, which is the default mode. In this mode, each message
+is processed in isolation. The other mode, bulk, is described later on and
+allows you to gather multiple messages into your callback state and batch
+process them towards the other end.
+
+### Single-mode subscription
+
 Configuration allows you to set QoS parameters on the line and also
 configure how many workers should be attached to the RabbitMQ queue
 for the service. In turn, this provides a simple connection limiter if
@@ -411,6 +419,69 @@ understand itself, it is forwarded to the `handle_info` function:
 
 It is intended to be used to handle a state change upon external
 events.
+
+### Bulk-mode subscription
+
+Enabling bulk mode proceeds as single mode configuration, but sets the `bulk`
+mode flag on the connection:
+
+	Config = #{
+		name => Name,
+		function => fun CallbackMod:loop/5,
+		handle_info => fun CallbackMod:handle_info/2,
+		…,
+		
+		prefetch_count => PC,
+		mode => bulk
+	}
+	
+This setting will feed messages to your callback function, up to the prefetch_count, `PC`.
+Hence, it is advised to set a relatively large prefetch count if batching is desirable. In `bulk`
+mode, the callback function looks like:
+
+	loop(RoutingKey, ContentType, Payload, Tag, State) -> {Cmds, State}
+
+where `Cmds` is a list of (effectful) commands to apply to the RabbitMQ system. The list
+can be empty, in which case no commands are processed. Note that the loop function
+also contains an opaque `Tag` for the incoming message. If you store that tag, you can
+use it in commands later on in the sequence. The possible commands are:
+
+* `{ack, Tag}` — ack the message with `Tag`.
+* `{bulk_ack, Tag}` — ack *every* message up to and including `Tag`. Only sends a single
+  message to RabbitMQ and is thus quite efficient.
+* `{bulk_nack, Tag}` — A RabbitMQ extension which is the dual of bulk_ack: reject every
+  message up to and including `Tag`.
+* `{reject, Tag}` — Reject the message with `Tag` requeueing it.
+* `{remove, Tag}` — Remove the mesage with `Tag` and do not requeue it (making dead-letter-exchange delivery happen)
+* `{reply, Tag, ContentType, Payload}` — Reply to the message identified by `Tag` with a `Payload` and set its content type to `ContentType`.
+
+In bulk-mode, the `handle_info/2` function is altered in two ways: one, it can now respond
+with commands to execute, and it will retrieve informational messages if the rabbitmq
+server goes away as well. The invocation is like:
+
+	handle_info(Info, State) -> {Cmds, State}.
+
+Where `Cmds` is as above, and `Info` is either a normal Info-message sent to the subscriber,
+or the tuple `{amqp_shutdown, Reason}`. In any other `Reason` than `normal` it will not be
+possible to process any commands, and the subscriber will warn you if you try.
+
+*Example:* The bulk-mode allows you to micro-batch messages. Set the prefetch count to 1000. When your loop function gets it's first incoming message, you store it and its `Tag` in the `State`, and you return `{[], NewState}` so the message is retained, but no ack is sent.
+
+When the first message is retrieved, you call `erlang:send_after(25, self(), batch_timeout)` which sets up a 25ms timeout. Now, typically two scenarios can happen:
+
+* You retrieve 100 messages before the timeout.
+* The timeout triggers.
+
+In any of these cases, you send off the current batch and pick the last `Tag` of all of these, cancel the timer if necessary[0], and return `{[{bulk_ack, Tag}], NewState}`. In turn, you are now batching messages.
+
+More advanced batching will look at the response and figure out if any messages in the batch failed. Then you can individually build up a command list:
+
+	Cmds = [{ack, Tag0}, {ack, Tag1}, {reject, Tag2}, {ack, Tag3}, {remove, Tag4}, …],
+	
+so you get the correct messages acked or rejected. You can also handle bulk-reply the same
+way by replying to invididual messages.
+
+[0] Use the `TimerRef` to get rid of timers that race you in the mailbox, by ignoring timers which you did not expect.
 
 # Operation and failure modes
 
