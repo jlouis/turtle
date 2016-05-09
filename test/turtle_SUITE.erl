@@ -62,7 +62,8 @@ basic_group() ->
        rpc,
        kill_publisher,
        kill_service,
-       faulty_service
+       faulty_service,
+       bulk
    ]}].
 
 groups() ->
@@ -137,7 +138,7 @@ send_recv_confirm(_Config) ->
     after 400 ->
         ct:fail(subscription_timeout)
     end,
-    
+
     %% Wait a bit for stability of the underlying counts
     ct:sleep(20),
 
@@ -150,7 +151,7 @@ send_recv_confirm(_Config) ->
 rpc(_Config) ->
     X = <<"rpc_exchange">>,
     Q = <<"rpc_queue">>,
-    
+
     ct:log("Add a subscriber service, echoing incoming messages"),
     F = fun(_Key, ContentType, Payload, _State) ->
         {reply, ContentType, Payload}
@@ -168,7 +169,7 @@ rpc(_Config) ->
             prefetch_count => 10,
             consume_queue => Q
         }),
-        
+
     ct:log("Start a new publisher process"),
     {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server, [],
                #{ confirms => true, rpc => enable }),
@@ -177,16 +178,82 @@ rpc(_Config) ->
     gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
     ct:log("Await the start of the service"),
     gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
-    
+
     ct:log("Run a single call"),
     {ok, _, <<"text/plain">>, <<"Hello world!">>} =
         turtle:rpc_sync(local_publisher, X, Q, <<"text/plain">>, <<"Hello world!">>),
-        
+
     ct:log("Run another single call"),
     {ok, _, <<"text/plain">>, <<"Hello world! (2)">>} =
         turtle:rpc_sync(local_publisher, X, Q, <<"text/plain">>, <<"Hello world! (2)">>),
-    
+
     run_many_rpc(5, 1000),
+    ok.
+
+bulk_loop(_Key, _CType, _Payload, T, State) ->
+    ct:log("bulk_loop(~p)", [{_Key, _CType, _Payload, T, State}]),
+    case State of
+        #{ tags := [] } = S ->
+            TRef = timer:send_after(75, self(), batch_timeout),
+            {[], S#{ timer := TRef, tags := [T] }};
+        #{ tags := Ts } = S ->
+            {[], S#{ tags := [T | Ts]}}
+    end.
+
+bulk_handle_info(batch_timeout, #{ recipient := TestPid, tags := Tags } = S) ->
+    ct:log("bulk_handle_info(~p)", [{batch_timeout, S}]),
+    TestPid ! length(Tags),
+    {[{ack, T} || T <- Tags], S#{ tags := [], timer := undefined }}.
+
+bulk(_Config) ->
+    X = <<"send_recv_exchange">>,
+    Q = <<"send_recv_queue">>,
+
+    ct:log("Add a bulk subscriber service, consuming on Q"),
+    Self = self(),
+    {ok, _ServicePid} = turtle_service:start_link(
+        #{
+            name => local_service,
+            connection => amqp_server,
+            function => fun bulk_loop/5,
+            handle_info => fun bulk_handle_info/2,
+            init_state => #{ recipient => Self, timer => undefined, tags => [] },
+            declarations =>
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
+            subscriber_count => 1,
+            prefetch_count => 5,
+            consume_queue => Q,
+            mode => bulk
+        }),
+    ct:log("Start a new publisher process"),
+    {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }]),
+
+    ct:log("Await the start of the publisher"),
+    gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
+    ct:log("Await the start of the service"),
+    gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+
+    ct:log("Publish a message on the channel"),
+    [turtle:publish(local_publisher, X, Q, <<"text/plain">>, <<"The turtle and the hare">>)
+      || _ <- lists:seq(1, 10)],
+
+    receive
+        5 -> ok
+    after 500 ->
+        ct:fail(subscription_timeout)
+    end,
+
+    %% Next batch
+     receive
+       5 -> ok
+    after 500 ->
+        ct:fail(subscription_timeout)
+    end,
     ok.
 
 send_recv(_Config) ->
@@ -241,7 +308,7 @@ send_recv(_Config) ->
     after 400 ->
         ct:fail(subscription_timeout)
     end,
-    
+
     %% Wait a bit for stability of the underlying counts
     ct:sleep(20),
 
@@ -257,7 +324,7 @@ faulty_service(_Config) ->
     random:seed(),
     X = <<"send_recv_exchange">>,
     Q = <<"send_recv_queue">>,
-    
+
     ct:log("Add a faulty subscriber, consuming on Q"),
     Self = self(),
     F = fun
@@ -266,7 +333,7 @@ faulty_service(_Config) ->
             Self ! {Key, ContentType, Payload},
             ack
     end,
-    
+
     {ok, _ServicePid} = turtle_service:start_link(
         #{
             name => local_service,
@@ -420,7 +487,7 @@ get_casts() ->
     {ok, PVals} = exometer:get_value([amqp_server, local_publisher, casts]),
     proplists:get_value(one, PVals).
 
-get_msgs() ->    
+get_msgs() ->
     {ok, SVals} = exometer:get_value([amqp_server, local_service, msgs]),
     proplists:get_value(one, SVals).
 
@@ -434,7 +501,7 @@ run_many_rpc(Workers, K) ->
     Processes = [spawn_monitor(F) || _ <- lists:seq(1, Workers)],
     ct:log("Spawned workers"),
     await(Processes).
-    
+
 await([{_Pid, MRef} | Left]) ->
     receive
         {'DOWN', MRef, process, _, normal} ->
