@@ -263,9 +263,10 @@ consume(Channel, Queue) ->
 %% @end
 %% @private
 cancel(Channel, Tag) ->
-   Cancel = #'basic.cancel' { consumer_tag = Tag },
-   #'basic.cancel_ok' {} = amqp_channel:call(Channel, Cancel),
-   ok.
+    Cancel = #'basic.cancel' { consumer_tag = Tag },
+    #'basic.cancel_ok' {} = amqp_channel:call(Channel, Cancel),
+    ok.
+
 
 %% @doc qos/2 set QoS parameters on a queue according to configuration
 %% @end

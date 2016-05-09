@@ -97,7 +97,7 @@ handle_info({#'basic.deliver'{}, _Content} = Msg, #state { mode = single } = Sta
 handle_info({#'basic.deliver'{}, _Content} = Msg, #state { mode = bulk } = State) ->
     handle_deliver_bulk(Msg, State);
 handle_info({'DOWN', MRef, process, _, normal}, #state { channel_ref = MRef } = State) ->
-    {stop, normal, State#state { channel = none }};
+    {stop, {channel_down, normal}, State#state { channel = none }};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { channel_ref = MRef } = State) ->
     {stop, {channel_down, Reason}, State#state { channel = none }};
 handle_info(#'basic.return' {} = Return, #state { name = Name } = State) ->
@@ -121,8 +121,8 @@ terminate({channel_down, _Reason}, _State) ->
     %% If the channel is gone, we can't do anything about it, just exit
     ok;
 terminate(_, #state { consumer_tag = Tag, channel = Ch }) when is_pid(Ch) ->
-    turtle:cancel(Ch, Tag),
-    await_cancel_ok(),
+    ok = turtle:cancel(Ch, Tag),
+    ok = await_cancel_ok(),
     %% Once we know we have cancellation, drain the queue of the remaining
     %% messages.
     drain_reject_messages(Ch),
@@ -198,7 +198,7 @@ handle_deliver_single({#'basic.deliver' {delivery_tag = DTag, routing_key = Key}
            lager:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
                [Class, Error, erlang:get_stacktrace(), format_amqp_msg(Content)]),
            lager:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
-           ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false }),
+           ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = DTag, requeue = false }),
            {stop, {Class, Error}, State}
     end.
 
