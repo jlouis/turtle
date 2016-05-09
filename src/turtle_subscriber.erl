@@ -345,7 +345,7 @@ delivery_tag({Tag, _ReplyTo, _CorrID}) -> Tag.
 
 shutdown(Reason, #state { handle_info = HandleInfo, invoke_state = IState } = State) ->
     S = turtle_time:monotonic_time(),
-    try HandleInfo(Reason, IState) of
+    try HandleInfo({amqp_shutdown, Reason}, IState) of
         {ok, IState2} -> {noreply, State#state { invoke_state = IState2 }};
         {Cmds, IState2} when is_list(Cmds) ->
             {stop, Reason,
