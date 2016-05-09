@@ -224,7 +224,7 @@ handle_commands(S, [C | Next],
            ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = delivery_tag(Tag), multiple = true }),
            handle_commands(S, Next, State);
        {bulk_nack, Tag} ->
-           E = turtle_time:monotic_time(),
+           E = turtle_time:monotonic_time(),
             exometer:update([CN, N, msgs], 1),
             exometer:update([CN, N, latency],
                 turtle_time:convert_time_unit(E-S, native, milli_seconds)),
