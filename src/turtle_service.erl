@@ -94,13 +94,7 @@ validate_config(#{
       is_integer(SC), SC > 0,
       is_integer(PC), PC >= 0,
       is_binary(Q) ->
-	ok = mode_ok(Conf),
-	ok = timeout_ok(Conf).
+	ok = mode_ok(Conf).
 
 mode_ok(#{ mode := Mode }) when Mode == bulk; Mode == single -> ok;
 mode_ok(#{}) -> ok.
-
-timeout_ok(#{ timeout := infinity }) -> ok;
-timeout_ok(#{ timeout := Ms}) when is_integer(Ms) -> ok;
-timeout_ok(#{ timeout := _Wrong }) -> exit(invalid_config);
-timeout_ok(#{}) -> ok.

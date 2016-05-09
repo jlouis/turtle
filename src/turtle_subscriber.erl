@@ -35,8 +35,7 @@
 	channel,
 	channel_ref,
 	consumer_tag,
-	mode = single,
-	timeout = infinity
+	mode = single
  }).
 
 %% LIFETIME MAINTENANCE
@@ -63,7 +62,6 @@ init([#{
     {ok, Tag} = turtle:consume(Ch, Queue),
     MRef = monitor(process, Ch),
     Mode = mode(Conf),
-    Timeout = timeout(Conf),
     {ok, #state {
         consumer_tag = Tag, 
         invoke = Fun,
@@ -73,8 +71,7 @@ init([#{
         channel_ref = MRef,
         conn_name = ConnName,
         name = Name,
-        mode = Mode,
-        timeout = Timeout }}.
+        mode = Mode }}.
 
 %% @private
 handle_call(Call, From, State) ->
@@ -82,9 +79,9 @@ handle_call(Call, From, State) ->
     {reply, {error, unknown_call}, State}.
 
 %% @private
-handle_cast(Cast, #state { timeout = T } = State) ->
+handle_cast(Cast, State) ->
     lager:warning("Unknown cast: ~p", [Cast]),
-    {noreply, State, T}.
+    {noreply, State}.
 
 %% @private
 handle_info(#'basic.consume_ok'{}, State) ->
@@ -207,8 +204,8 @@ handle_deliver_single({#'basic.deliver' {delivery_tag = DTag, routing_key = Key}
            {stop, {Class, Error}, State}
     end.
 
-handle_commands(_S, [], #state { timeout = T } = State) ->
-    {noreply, State, T};
+handle_commands(_S, [], State) ->
+    {noreply, State};
 handle_commands(S, [C | Next],
 	#state { channel = Channel, conn_name = CN, name = N } = State) ->
     case C of
@@ -336,9 +333,6 @@ drain_reject_messages(Channel) ->
 mode(#{ mode := bulk }) -> bulk;
 mode(#{ mode := single }) -> single;
 mode(#{}) -> single.
-
-timeout(#{ timeout := Ms }) -> Ms;
-timeout(#{}) -> infinity.
 
 %% Placeholder for later
 delivery_tag({Tag, _ReplyTo, _CorrID}) -> Tag.
