@@ -70,7 +70,7 @@ this number may become better over time. It is unlikely to become worse.
 
     - *Potential incompatibility:* The `handle_info/2` callback when doing subscription services can now be called in more situations. Make sure your callback handle unknown messages by ignoring them. Otherwise your service may fail.
     
-    - Add support for handling messages in bulk. See the appropriate section in the README file in order to use it.
+    - **(Experimental)** Add support for handling messages in bulk. See the appropriate section in the README file in order to use it. For now, this feature is experimental and subject to change if something doesn't work out.
 
     - Implement a change where `turtle_cannel` is renamed into `turtle_service_mgr` and draws no channels by itself. Rather, channels is now the domain of `turtle_subscriber`. This change moves the channel scope onto individual processes, which opens the design space for further improvement.
 
@@ -424,7 +424,9 @@ understand itself, it is forwarded to the `handle_info` function:
 It is intended to be used to handle a state change upon external
 events.
 
-### Bulk-mode subscription
+### Bulk-mode subscription *(Experimental)*
+
+*Note:* We think this feature is sound, but currently it has not seen much use and thus, the API might change in the future. We will have to address problems, surely, and some of those might alter the API.
 
 Enabling bulk mode proceeds as single mode configuration, but sets the `bulk`
 mode flag on the connection:
