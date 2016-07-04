@@ -66,6 +66,10 @@ this number may become better over time. It is unlikely to become worse.
 
 # Changes
 
+* *Version 1.7.1* — Erlang/OTP 19.x support
+
+    - *Potential incompatibility:* The versions of `rabbit_common` and `amqp_client` are now locked to version 3.6.2, with a fix for Erlang/OTP 19 compiles. This means `turtle` can be used with the newest Erlang version. There has not been much testing as of this patch, but the purpose is to enable forward adoption.
+
 * *Version 1.7.0* — Bulk messaging support
 
     - *Potential incompatibility:* The `handle_info/2` callback when doing subscription services can now be called in more situations. Make sure your callback handle unknown messages by ignoring them. Otherwise your service may fail.
