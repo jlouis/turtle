@@ -248,6 +248,26 @@ may throw away the message on an error).
 
 ### Remote procedure calls
 
+To enable the RPC mechanism, you must change the configuration of
+publisher process like the following:
+
+    %% AMQP Publisher
+    Exch = …,
+    …,
+    AMQPDecls = [ … ],
+    AMQPPoolChildSpec =
+        turtle_publisher:child_spec(PublisherName, ConnName, AMQPDecls,
+            #{
+              confirms => true,
+              passive => false,
+              rpc => enable
+             }),
+
+In particular, the configuration adds the `rpc => enable` binding, but is
+otherwise the same as the above publisher configuration. This makes the
+publisher configure itself for retrival of RPC messages by declaring an
+exclusive `reply_to` queue for itself.
+
 The RPC mechanism of the publisher might at first look a bit "off" but
 there is a reason to the madness. Executing RPC calls runs in two
 phases. First, you publish a Query. This results in a publication
