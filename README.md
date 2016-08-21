@@ -66,6 +66,10 @@ this number may become better over time. It is unlikely to become worse.
 
 # Changes
 
+* *Version 1.7.2* — Maintain parity with `amqp_client`
+
+    - Pick up the official 3.6.2 release of `amqp_client` together with its Erlang/OTP 19.x support.
+
 * *Version 1.7.1* — Erlang/OTP 19.x support
 
     - *Potential incompatibility:* The versions of `rabbit_common` and `amqp_client` are now locked to version 3.6.2, with a fix for Erlang/OTP 19 compiles. This means `turtle` can be used with the newest Erlang version. There has not been much testing as of this patch, but the purpose is to enable forward adoption.

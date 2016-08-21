@@ -1,6 +1,6 @@
 [{<<"amqp_client">>,
   {git,"https://github.com/jbrisbin/amqp_client.git",
-       {ref,"a509e5d4d731d6edeb755bd0f59250ebaf1f0130"}},
+       {ref,"d50aec00b94f0766a048b4eceaf25ddfdeeb1d86"}},
   0},
  {<<"bear">>,
   {git,"git://github.com/boundary/bear.git",
@@ -24,7 +24,7 @@
   1},
  {<<"gproc">>,
   {git,"https://github.com/uwiger/gproc",
-       {ref,"58b75ef086d568e84ee56c390e250b7b924f2ce8"}},
+       {ref,"1c6280c04f426473b4e0e15de559c8fc51de94d1"}},
   0},
  {<<"lager">>,
   {git,"https://github.com/basho/lager",
@@ -52,5 +52,5 @@
   1},
  {<<"uuid">>,
   {git,"https://github.com/okeuday/uuid",
-       {ref,"fdd2861e2f5049c25d44ff342c9756ce64a2a783"}},
+       {ref,"06eca0bd373e97f5d7eda4f8df0621d3903754ef"}},
   0}].
