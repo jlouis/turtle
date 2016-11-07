@@ -40,7 +40,7 @@
   1},
  {<<"quickrand">>,
   {git,"https://github.com/okeuday/quickrand.git",
-       {ref,"559e5e3f28bb2bf51acbc38f1c47b12c10094117"}},
+       {ref,"178c3340ae3f666bfa1fe0472a68e44dca552b1a"}},
   1},
  {<<"rabbit_common">>,
   {git,"https://github.com/jbrisbin/rabbit_common.git",
@@ -52,5 +52,5 @@
   1},
  {<<"uuid">>,
   {git,"https://github.com/okeuday/uuid",
-       {ref,"fdd2861e2f5049c25d44ff342c9756ce64a2a783"}},
+       {ref,"15bd7676d29bec7bd967a2cab931006a4c968040"}},
   0}].
