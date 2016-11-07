@@ -1,6 +1,6 @@
 [{<<"amqp_client">>,
   {git,"https://github.com/jbrisbin/amqp_client.git",
-       {ref,"a509e5d4d731d6edeb755bd0f59250ebaf1f0130"}},
+       {ref,"d50aec00b94f0766a048b4eceaf25ddfdeeb1d86"}},
   0},
  {<<"bear">>,
   {git,"git://github.com/boundary/bear.git",
