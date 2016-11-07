@@ -321,7 +321,6 @@ send_recv(_Config) ->
     ok.
 
 faulty_service(_Config) ->
-    random:seed(),
     X = <<"send_recv_exchange">>,
     Q = <<"send_recv_queue">>,
 
@@ -371,7 +370,6 @@ faulty_service(_Config) ->
     ok.
 
 kill_service(_Config) ->
-    random:seed(),
     X = <<"send_recv_exchange">>,
     Q = <<"send_recv_queue">>,
 
@@ -427,7 +425,7 @@ kill_service(_Config) ->
     true = MgrPid /= MgrPid2,
 
     ct:log("Publish a message on the channel"),
-    M = term_to_binary({msg, random:uniform(16#FFFF)}),
+    M = term_to_binary({msg, rand:uniform(16#FFFF)}),
     turtle:publish(local_publisher, X, Q, <<"text/plain">>, M),
     receive
         {Q, <<"text/plain">>, M} ->
@@ -493,7 +491,6 @@ get_msgs() ->
 
 run_many_rpc(Workers, K) ->
     F = fun() ->
-         random:seed(erlang:timestamp()),
          rpc_worker_loop(K),
          ct:log("Worker done"),
          ok
@@ -518,7 +515,7 @@ rpc_worker_loop(K) ->
     X = <<"rpc_exchange">>,
     Q = <<"rpc_queue">>,
 
-    I = random:uniform(10000),
+    I = rand:uniform(10000),
     {ok, _, <<"ctype">>, <<I:64/integer>>} =
         turtle:rpc_sync(local_publisher, X, Q, <<"ctype">>, <<I:64/integer>>),
     rpc_worker_loop(K-1).
