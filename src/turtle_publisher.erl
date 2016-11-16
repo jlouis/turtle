@@ -345,12 +345,19 @@ properties(ContentType, #{ delivery_mode := ephemeral }) ->
     #'P_basic' { content_type = ContentType }.
 
 %% Create a new publish package
-mk_publish(Exch, Key, ContentType, Payload, Opts) ->
+mk_publish(Exch, Key, ContentType, IODataPayload, Opts) ->
     Pub = #'basic.publish' {
         exchange = Exch,
         routing_key = Key
     },
     Props = properties(ContentType, Opts),
+    
+    %% Much to our dismay, the amqp_client will only accept payloads which are
+    %% already flattened binaries. We claim to support general iodata() input, so
+    %% we have to convert the payload into the right form, which the amqp_client
+    %% understands
+    
+    Payload = iolist_to_binary(IODataPayload),
     {publish, Pub, Props, Payload}.
 
 %% Perform the AMQP publication and track confirms
