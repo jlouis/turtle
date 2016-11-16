@@ -42,7 +42,7 @@
 %% -- API --------------------------------------------------
 
 
-%% @equiv publish(Name, Exch, Key, ContentType, Payload, #{})
+%% @equiv publish(Name, Exch, Key, ContentType, Payload, #{ delivery_mode => ephemeral })
 -spec publish(Pub, Exchange, Key, CType, Payload) -> ok
 	when
 	  Pub :: atom(),

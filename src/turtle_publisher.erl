@@ -342,6 +342,9 @@ exo_update(#state { conn_name = ConnName, name = Name }, T, C) ->
 properties(ContentType, #{ delivery_mode := persistent }) ->
     #'P_basic' { content_type = ContentType, delivery_mode = 2 };
 properties(ContentType, #{ delivery_mode := ephemeral }) ->
+    #'P_basic' { content_type = ContentType };
+properties(ContentType, #{}) ->
+    %% Default to the ephemeral delivery mode if nothing given
     #'P_basic' { content_type = ContentType }.
 
 %% Create a new publish package
