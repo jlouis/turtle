@@ -33,6 +33,12 @@
 	qos/2
 ]).
 
+%% Info API
+-export([
+	i/0,
+	i/1
+]).
+
 -type channel() :: pid().
 -type time() :: integer().
 -type rpc_tag() :: { pid(), integer() }.
@@ -244,6 +250,23 @@ rpc_sync(Pub, X, Key, CType, Payload, #{ timeout := Timeout }) ->
 publish_sync(Pub, X, Key, CType, Payload, Opts) ->
     turtle_publisher:publish_sync(Pub, X, Key, CType, Payload, Opts).
 
+%% @doc i/0 returns information about turtle children in the system
+%%
+%% @end
+-spec i() -> #{ atom() => any() }.
+
+i() ->
+    #{
+        publishers => i(publishers)
+    }.
+
+-spec i(publishers) -> #{ any() => pid() }.
+
+i(publishers) ->
+    MS = ets:fun2ms(fun({{n,l,{turtle,publisher,Name}}, Pid, _}) -> {Name, Pid} end),
+    Entries = gproc:select({local, names}, MS),
+    maps:to_list(Entries).
+    
 %% -- PRIVATE API ---------------------------------------------------
 
 
