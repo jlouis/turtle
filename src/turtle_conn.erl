@@ -130,7 +130,8 @@ handle_info(connect,
             erlang:send_after(Retry, self(), connect),
             {noreply, NextState}
     end;
-handle_info(_, State) ->
+handle_info(Info, State) ->
+    lager:warning("Received unknown info-message in turtle_conn: ~p", [Info]),
     {noreply, State}.
 
 %% @private
