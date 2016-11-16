@@ -68,6 +68,7 @@ this number may become better over time. It is unlikely to become worse.
 
 * *Version 1.7.2* — Maintenance release
 
+    - Use the `rand` module in Turtle from now on. Readies ourselves for Erlang/OTP 20
     - Use 'erlang-lager/lager' in version 3.2.4 in order to support the newly formed lager organization.
     
 * *Version 1.7.1* — Erlang/OTP 19.x support
