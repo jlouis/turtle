@@ -266,7 +266,13 @@ i(publishers) ->
     MS = ets:fun2ms(fun({{n,l,{turtle,publisher,Name}}, Pid, _}) -> {Name, Pid} end),
     Entries = gproc:select({local, names}, MS),
     maps:to_list(Entries).
-    
+
+await(publisher, Name) ->    
+    await(publisher, Name, 5000).
+
+await(publisher, Name, Timeout) ->
+    turtle_publisher:await(Name, Timeout).
+
 %% -- PRIVATE API ---------------------------------------------------
 
 
