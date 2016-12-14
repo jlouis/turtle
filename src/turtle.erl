@@ -25,6 +25,11 @@
 	rpc_sync/5, rpc_sync/6
 ]).
 
+%% Lifetime API
+-export([
+    await/2, await/3
+]).
+
 %% Low level API
 -export([
 	declare/2, declare/3,
@@ -265,7 +270,7 @@ i() ->
 i(publishers) ->
     MS = ets:fun2ms(fun({{n,l,{turtle,publisher,Name}}, Pid, _}) -> {Name, Pid} end),
     Entries = gproc:select({local, names}, MS),
-    maps:to_list(Entries).
+    maps:from_list(Entries).
 
 await(publisher, Name) ->    
     await(publisher, Name, 5000).
