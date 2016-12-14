@@ -14,6 +14,7 @@
 %% @end
 -module(turtle).
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("stdlib/include/ms_transform.hrl").
 
 %% High level API
 -export([
