@@ -5,11 +5,11 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %% Lifetime
--export([
-	start_link/3,
-    start_link/4,
-    where/1,
-    child_spec/4
+-export([start_link/3,
+         start_link/4,
+         where/1,
+         child_spec/4,
+         await/2
 ]).
 
 %% API
@@ -109,6 +109,11 @@ start_link(takeover, Name, Connection, Declarations, InOptions) ->
 %% @end
 where(N) ->
     gproc:where({n,l,{turtle,publisher,N}}).
+
+%% @doc await/2 waits for a publisher to come on-line or a timeout
+%% @end
+await(N, Timeout) ->
+    gproc:await({n,l,{turtle,publisher,N}}, Timeout).
 
 %% @doc publish a message asynchronously to RabbitMQ
 %%

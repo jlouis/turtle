@@ -14,6 +14,7 @@
 %% @end
 -module(turtle).
 -include_lib("amqp_client/include/amqp_client.hrl").
+-include_lib("stdlib/include/ms_transform.hrl").
 
 %% High level API
 -export([
@@ -23,6 +24,11 @@
 	rpc_await/3, rpc_await_monitor/3,
 	rpc_cancel/2,
 	rpc_sync/5, rpc_sync/6
+]).
+
+%% Lifetime API
+-export([
+    await/2, await/3
 ]).
 
 %% Low level API
@@ -265,8 +271,14 @@ i() ->
 i(publishers) ->
     MS = ets:fun2ms(fun({{n,l,{turtle,publisher,Name}}, Pid, _}) -> {Name, Pid} end),
     Entries = gproc:select({local, names}, MS),
-    maps:to_list(Entries).
-    
+    maps:from_list(Entries).
+
+await(publisher, Name) ->    
+    await(publisher, Name, 5000).
+
+await(publisher, Name, Timeout) ->
+    turtle_publisher:await(Name, Timeout).
+
 %% -- PRIVATE API ---------------------------------------------------
 
 

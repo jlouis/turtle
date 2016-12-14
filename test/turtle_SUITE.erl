@@ -287,7 +287,13 @@ send_recv(_Config) ->
                 #'queue.bind' { queue = Q, exchange = X, routing_key = Q }]),
 
     ct:log("Await the start of the publisher"),
-    gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
+    turtle:await(publisher, local_publisher, 300),
+    
+    ct:log("Test the i/0 command"),
+    #{
+       publishers := #{
+         local_publisher := P }} = turtle:i(),
+    true = is_pid(P),
     ct:log("Await the start of the service"),
     gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
 
