@@ -66,6 +66,13 @@ this number may become better over time. It is unlikely to become worse.
 
 # Changes
 
+* *Version 1.8.0* - Make await an officially supported feature
+
+    - Support turtle:await/2 which allows your system to wait for the
+      presence of a publisher. This is highly useful in startup
+      scenarios, where parts of your system needs to wait on other
+      parts of the system to be ready before they can operate.
+      
 * *Version 1.7.2* — Maintenance release
 
     - Use the `rand` module in Turtle from now on. Readies ourselves for Erlang/OTP 20

@@ -1,6 +1,6 @@
 {application, 'turtle',
  [{description, "Turtle manages RabbitMQ connections"},
-  {vsn, "1.7.1"},
+  {vsn, "1.8.0"},
   {registered, []},
   {mod, {'turtle_app', []}},
   {applications,
