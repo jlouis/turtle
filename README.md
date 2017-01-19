@@ -90,6 +90,12 @@ become worse.
 
 # Changes
 
+* *Version 1.8.1* - Maintenance release
+
+    - The child spec validator had a bug where `callback/5` functions
+      were rejected as wrong. These are correct in bulk mode, so
+      accept both `/4` and `/5` for now.
+
 * *Version 1.8.0* - Make await an officially supported feature
 
     - Support turtle:await/2 which allows your system to wait for the
