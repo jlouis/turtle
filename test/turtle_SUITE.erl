@@ -156,19 +156,24 @@ rpc(_Config) ->
     F = fun(_Key, ContentType, Payload, _State) ->
         {reply, ContentType, Payload}
     end,
-    {ok, _ServicePid} = turtle_service:start_link(
-        #{
-            name => local_service,
-            connection => amqp_server,
-            function => F,
-            declarations =>
-               [#'exchange.declare' { exchange = X },
-                #'queue.declare' { queue = Q },
-                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
-            subscriber_count => 3,
-            prefetch_count => 10,
-            consume_queue => Q
-        }),
+    HI = fun(_Info, State) -> {ok, State} end,
+    TConf = #{
+        name => local_service,
+        connection => amqp_server,
+        function => F,
+        handle_info => HI,
+        init_state => #{},
+        declarations =>
+        [#'exchange.declare' { exchange = X },
+            #'queue.declare' { queue = Q },
+            #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
+        subscriber_count => 3,
+        prefetch_count => 10,
+        consume_queue => Q
+    },
+    ct:log("Creating Child Specs"),
+    _ChildSpecs = turtle_service:child_spec(TConf),
+    {ok, _ServicePid} = turtle_service:start_link(TConf),
 
     ct:log("Start a new publisher process"),
     {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server, [],
@@ -211,22 +216,24 @@ bulk(_Config) ->
 
     ct:log("Add a bulk subscriber service, consuming on Q"),
     Self = self(),
-    {ok, _ServicePid} = turtle_service:start_link(
-        #{
-            name => local_service,
-            connection => amqp_server,
-            function => fun bulk_loop/5,
-            handle_info => fun bulk_handle_info/2,
-            init_state => #{ recipient => Self, timer => undefined, tags => [] },
-            declarations =>
-               [#'exchange.declare' { exchange = X },
-                #'queue.declare' { queue = Q },
-                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
-            subscriber_count => 1,
-            prefetch_count => 5,
-            consume_queue => Q,
-            mode => bulk
-        }),
+    TConf = #{
+        name => local_service,
+        connection => amqp_server,
+        function => fun bulk_loop/5,
+        handle_info => fun bulk_handle_info/2,
+        init_state => #{ recipient => Self, timer => undefined, tags => [] },
+        declarations =>
+        [#'exchange.declare' { exchange = X },
+            #'queue.declare' { queue = Q },
+            #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
+        subscriber_count => 1,
+        prefetch_count => 5,
+        consume_queue => Q,
+        mode => bulk
+    },
+    ct:log("Creating Child Specs"),
+    _ChildSpecs = turtle_service:child_spec(TConf),
+    {ok, _ServicePid} = turtle_service:start_link(TConf),
     ct:log("Start a new publisher process"),
     {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,
                [#'exchange.declare' { exchange = X },

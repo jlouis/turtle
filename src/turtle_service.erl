@@ -88,7 +88,7 @@ validate_config(#{
     when
       is_atom(N),
       is_atom(C),
-      is_function(F, 4),
+      is_function(F, 4) orelse is_function(F, 5),
       is_function(HI, 2),
       is_list(Decls),
       is_integer(SC), SC > 0,
