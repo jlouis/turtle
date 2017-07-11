@@ -1,10 +1,28 @@
 language: erlang
+sudo: false
 
 services:
   - rabbitmq
 
-otp_release:
-    - 19.3
-    - 20.0
+os: linux
+otp_release: 19.3
 
-script: "make update compile test"
+matrix:
+  include:
+    - os: linux
+      otp_release: 19.3
+    - os: linux
+      otp_release: 20.0
+
+script: "make compile test dialyzer REBAR=./rebar3"
+
+cache:
+    directories:
+        - $HOME/.cache/rebar3
+
+install:
+  - wget https://s3.amazonaws.com/rebar3/rebar3 && chmod +x rebar3
+
+notifications:
+  recipients:
+    - jesper.louis.andersen@gmail.com
