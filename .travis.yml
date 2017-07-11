@@ -4,7 +4,7 @@ services:
   - rabbitmq
 
 otp_release:
-    - 17.5
-    - 18.0
+    - 19.3
+    - 20.0
 
-script: "make update compile travis-test"
+script: "make update compile test"
