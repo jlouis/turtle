@@ -130,7 +130,7 @@ publish(Publisher, Exch, Key, ContentType, Payload, Opts) ->
 %%
 %% A synchronous publish means the caller is blocked until the message is
 %% on-the-wire toward the RabbitMQ server. It doesn't guarantee delivery, for
-%% which yu must use publisher confirms. The options are as in {@link publish/5}
+%% which you must use publisher confirms. The options are as in {@link publish/5}
 %%
 %% @end
 publish_sync(Publisher, Exch, Key, ContentType, Payload, Opts) ->
