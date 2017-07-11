@@ -3,15 +3,15 @@ REBAR=./rebar3
 
 .PHONY: compile
 compile:
-	$(REBAR) compile | sed -e 's|_build/default/lib/turtle/||'
+	$(REBAR) compile
 
 .PHONY: dialyzer
 dialyzer:
-	$(REBAR) dialyzer | sed -e 's|_build/default/lib/turtle/||'
+	$(REBAR) dialyzer
 
 .PHONY: test	
 test:
-	$(REBAR) ct | sed -e 's|_build/test/lib/turtle/||'
+	$(REBAR) ct
 
 .PHONY: edoc
 edoc:
