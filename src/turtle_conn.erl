@@ -39,7 +39,7 @@
 
 -record(conn_group, {
     orig :: [{atom(), [network_connection()]}],
-    orig_group :: [network_connection()],
+    orig_group = [] :: [network_connection()],
     attempts = ?DEFAULT_ATTEMPT_COUNT :: non_neg_integer(),
     next
 }).

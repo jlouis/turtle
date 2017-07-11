@@ -351,8 +351,6 @@ shutdown(Reason, #state { handle_info = HandleInfo, invoke_state = IState } = St
             {stop, {Class, Error}, State}
     end.
 
-shutdown_process_commands(S, Cmds, State, normal) ->
-    handle_commands(S, Cmds, State);
 shutdown_process_commands(_S, [], State, _Reason) ->
     State;
 shutdown_process_commands(_S, Cmds, State, Reason) ->
