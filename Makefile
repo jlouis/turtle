@@ -1,4 +1,4 @@
-REBAR=./rebar3
+REBAR=rebar3
 .DEFAULT_GOAL := compile
 
 .PHONY: compile
