@@ -39,7 +39,6 @@
          conn_name,
          name,
 	channel,
-	channel_ref,
 	conn_ref,
 	confirms,
 	reply_queue,
@@ -154,7 +153,6 @@ update_configuration(Name, Connection, Decls, InOpts) ->
 
 %% @private
 init([{takeover, Name}, ConnName, Options]) ->
-    process_flag(trap_exit, true),
     Ref = gproc:nb_wait({n,l,{turtle,connection, ConnName}}),
     ok = exometer:ensure([ConnName, Name, casts], spiral, []),
     {ok, {initializing_takeover, Name, Ref, ConnName, Options}};
@@ -162,7 +160,6 @@ init([Name, ConnName, Options]) ->
     %% Initialize the system in the {initializing,...} state and await the presence of
     %% a connection under the given name without blocking the process. We replace
     %% the state with a #state{} record once that happens (see handle_info/2)
-    process_flag(trap_exit, true),
     Ref = gproc:nb_wait({n,l,{turtle,connection,ConnName}}),
     ok = exometer:ensure([ConnName, Name, casts], spiral, []),
     {ok, {initializing, Name, Ref, ConnName, Options}}.
@@ -220,12 +217,10 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, N, Ref, CName,
     ok = handle_confirms(Channel, Options),
     {ok, ReplyQueue, Tag} = handle_rpc(Channel, Options),
     ConnMRef = monitor(process, Pid),
-    ChanMRef = monitor(process, Channel),
     reg(N),
     {noreply,
       #state {
         channel = Channel,
-        channel_ref = ChanMRef,
         conn_ref = ConnMRef,
         conn_name = CName,
         confirms = Confirms,
@@ -241,7 +236,6 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing_takeover, N, Re
     ok = handle_confirms(Channel, Options),
     {ok, ReplyQueue, Tag} = handle_rpc(Channel, Options),
     ConnMRef = monitor(process, Pid),
-    ChanMRef = monitor(process, Channel),
     case where(N) of
         undefined ->
             reg(N);
@@ -251,7 +245,6 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing_takeover, N, Re
     {noreply,
       #state {
         channel = Channel,
-        channel_ref = ChanMRef,
         conn_ref = ConnMRef,
         conn_name = CName,
         confirms = Confirms,
@@ -267,13 +260,18 @@ handle_info(#'basic.nack' { delivery_tag = Seq, multiple = Multiple },
 	#state { confirms = true } = State) ->
     {ok, State} = confirm(nack, Seq, Multiple, State),
     {noreply, State};
+handle_info({channel_closed, Ch, Reason}, #state { channel = Ch } = State) ->
+    Exit = case Reason of
+               normal -> normal;
+               shutdown -> normal;
+               {shutdown, _} -> normal;
+               Err -> {amqp_channel_closed, Err}
+           end,
+    {stop, Exit, State};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
     {stop, {error, {connection_down, Reason}}, State};
-handle_info({'DOWN', MRef, process, _, normal}, #state { channel_ref = MRef } = State) ->
-    {stop, normal, State#state { channel = none }};
-handle_info({'DOWN', MRef, process, _, Reason}, #state { channel_ref = MRef } = State) ->
-    {stop, {error, {channel_down, Reason}}, State#state { channel = none }};
 handle_info({'DOWN', MRef, process, _, _Reason}, #state { in_flight = IF } = State) ->
+    %% Remove in-flight monitor if the RPC caller goes away
     {noreply, State#state { in_flight = track_cancel_monitor(MRef, IF) }};
 handle_info({#'basic.deliver' { delivery_tag = Tag}, Content}, State) ->
     handle_deliver(Tag, Content, State);
@@ -287,9 +285,6 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 %% @private
-terminate(_Reason, #state { channel = Channel }) when is_pid(Channel) ->
-    amqp_channel:close(Channel),
-    ok;
 terminate(_Reason, _State) ->
     ok.
 
