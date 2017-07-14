@@ -29,7 +29,6 @@
 	invoke_state = init,
 	handle_info = undefined,
 	channel,
-	channel_ref,
 	consumer_tag,
 	mode = single
  }).
@@ -50,13 +49,11 @@ init([#{
         name := Name,
         passive := Passive,
         declarations := Decls } = Conf]) ->
-    process_flag(trap_exit, true),
     {ok, Ch} = turtle:open_channel(ConnName),
     ok = turtle:qos(Ch, Conf),
     ok = amqp_channel:register_return_handler(Ch, self()),
     ok = turtle:declare(Ch, Decls, #{ passive => Passive }),
     {ok, Tag} = turtle:consume(Ch, Queue),
-    MRef = monitor(process, Ch),
     Mode = mode(Conf),
     {ok, #state {
         consumer_tag = Tag, 
@@ -64,7 +61,6 @@ init([#{
         invoke_state = invoke_state(Conf),
         handle_info = handle_info(Conf),
         channel = Ch,
-        channel_ref = MRef,
         conn_name = ConnName,
         name = Name,
         mode = Mode }}.
@@ -89,15 +85,17 @@ handle_info({#'basic.deliver'{}, _Content} = Msg, #state { mode = single } = Sta
     handle_deliver_single(Msg, State);
 handle_info({#'basic.deliver'{}, _Content} = Msg, #state { mode = bulk } = State) ->
     handle_deliver_bulk(Msg, State);
-handle_info({'DOWN', MRef, process, _, normal}, #state { channel_ref = MRef } = State) ->
-    {stop, {channel_down, normal},
-        shutdown(channel_down, State#state { channel = none })};
-handle_info({'DOWN', MRef, process, _, Reason}, #state { channel_ref = MRef } = State) ->
-    {stop, {channel_down, Reason},
-        shutdown(channel_down, State#state { channel = none })};
 handle_info(#'basic.return' {} = Return, #state { name = Name } = State) ->
     lager:info("Channel ~p received a return from AMQP: ~p", [Name, Return]),
     {noreply, State};
+handle_info({channel_closed, Ch, Reason}, #state { channel = Ch } = State) ->
+    Exit = case Reason of
+               normal -> normal;
+               shutdown -> normal;
+               {shutdown, _} -> normal;
+               Err -> {amqp_channel_died, Err}
+           end,
+    {stop, Exit, shutdown(Exit, State#state { channel = none })};
 handle_info(Info, #state { handle_info = undefined } = State) ->
     lager:warning("Unknown info message: ~p", [Info]),
     {noreply, State};
@@ -115,21 +113,21 @@ handle_info(Info, #state { handle_info = HandleInfo, invoke_state = IState } = S
     end.
 
 %% @private
-terminate({channel_down, _Reason}, _State) ->
-    %% If the channel is gone, we can't do anything about it, just exit
-    ok;
 terminate(_, #state { consumer_tag = Tag, channel = Ch }) when is_pid(Ch) ->
+    %% If a wise soul calls gen_server:stop on us, we can still drain the messages
+    %% out of the channel queue explicitly. We'll try this as part of stopping
     ok = turtle:cancel(Ch, Tag),
     ok = await_cancel_ok(),
     %% Once we know we have cancellation, drain the queue of the remaining
     %% messages.
     drain_reject_messages(Ch),
-    %% Unregister and close the channel. If the channel is gone, this will fail, but
+    %% Unregister ourselves the return handler. If the channel is gone, this will fail, but
     %% this is not going to be a problem.
     ok = amqp_channel:unregister_return_handler(Ch),
-    ok = amqp_channel:close(Ch),
+    %% Janitor will close the channel
     ok;    
 terminate(_Reason, _State) ->
+    %% If we are in a different state, we can't do anything nice. Just die.
     ok.
 
 %% @private
