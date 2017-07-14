@@ -83,8 +83,28 @@ handle_info({'DOWN', MRef, process, _Pid, Reason},
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(Reason, #state { bimap = Map }) ->
+    Candidates = terminate_sort([K || K <- maps:keys(Map), not is_reference(K)]),
+    ok = terminate_cleanup(Reason, Candidates),
     ok.
+
+terminate_sort(L) ->
+    F = fun(V1, V2) ->
+                case {element(1, V1), element(1, V2)} of
+                    {consumer, _} -> true;
+                    {channel, consumer} -> false;
+                    {channel, _} -> true;
+                    {connection, consumer} -> false;
+                    {connection, channel} -> false;
+                    {connection, _} -> true
+                end
+        end,
+    lists:sort(F, L).
+
+terminate_cleanup(_Reason, []) -> ok;
+terminate_cleanup(Reason, [V | Vs]) ->
+    cleanup(V, Reason),
+    terminate_cleanup(Reason, Vs).
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
@@ -92,6 +112,8 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
 
 cleanup({channel, _Pid, Ch}, _Reason) ->
     catch amqp_channel:close(Ch),
