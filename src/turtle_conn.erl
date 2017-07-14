@@ -19,7 +19,7 @@
 
 %% API
 -export([
-	open_channel/1,
+	conn/1,
 	close/1
 ]).
 
@@ -61,8 +61,8 @@ start_link(Name, Configuration) ->
 close(Name) ->
     call(Name, close).
 
-open_channel(Name) ->
-    call(Name, open_channel).
+conn(Name) ->
+    call(Name, conn).
     
 call(Loc, Msg) ->
     Pid = gproc:where({n,l,{turtle, connection, Loc}}),
@@ -83,12 +83,12 @@ init([Name, Configuration]) ->
 %% @private
 handle_call(_Msg, _From, #state { connection = undefined } = State) ->
     {reply, {error, no_amqp_connection}, State};
-handle_call(close, _From, #state { connection = Conn } = State) ->
-    ok = amqp_connection:close(Conn),
+handle_call(close, _From, State) ->
     {stop, normal, ok, State};
-handle_call(open_channel, _From, #state { connection = Conn } = State) ->
-    ChanRes = amqp_connection:open_channel(Conn),
-    {reply, ChanRes, State};
+handle_call(conn, _From, #state { connection = undefined } = State) ->
+    {reply, {error, no_amqp_connection}, State};
+handle_call(conn, _From, #state { connection = Conn } = State) ->
+    {reply, Conn, State};
 handle_call(Call, From, State) ->
     lager:warning("Unknown call from ~p: ~p", [From, Call]),
     {reply, {error, unknown_call}, State}.

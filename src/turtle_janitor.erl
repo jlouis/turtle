@@ -58,15 +58,20 @@ handle_call({open_connection, Network}, {Pid, _}, #state { bimap = BiMap } = Sta
             {reply, Err, State}
     end;
 handle_call({open_channel, Name}, {Pid, _}, #state { bimap = BiMap } = State) ->
-    case turtle_conn:open_channel(Name) of
-        {ok, Channel} ->
-            %% Hand out a channel to Pid
-            MRef = erlang:monitor(process, Pid),
-            {reply,
-             {ok, Channel},
-             State#state { bimap = bimap_put({channel, Pid, Channel}, MRef, BiMap) }};
-        Err ->
-            {reply, Err, State}
+    case turtle_conn:conn(Name) of
+        Conn when is_pid(Conn) ->
+            case amqp_connection:open_channel(Conn) of
+                {ok, Channel} ->
+                    %% Hand out a channel to Pid
+                    MRef = erlang:monitor(process, Pid),
+                    {reply,
+                     {ok, Channel},
+                     State#state { bimap = bimap_put({channel, Pid, Channel}, MRef, BiMap) }};
+                Err ->
+                    {reply, Err, State}
+            end;
+        {error, no_amqp_connection} ->
+            {reply, {error, no_amqp_connection}, State}
     end;
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -113,10 +118,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-
-
-cleanup({channel, _Pid, Ch}, _Reason) ->
+cleanup({channel, Pid, Ch}, Reason) ->
     catch amqp_channel:close(Ch),
+    Pid ! {channel_closed, Ch, Reason},
     ok;
 cleanup({connection, Pid, Conn}, Reason) ->
     catch amqp_connection:close(Conn),

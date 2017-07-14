@@ -319,7 +319,7 @@ qos(_Ch, _Conf) -> ok.
 -spec open_channel(atom()) -> {ok, channel()} | {error, Reason}
     when Reason :: term().
 open_channel(Name) ->
-    turtle_conn:open_channel(Name).
+    turtle_janitor:open_channel(Name).
 
 open_connection(Network) ->
     turtle_janitor:open_connection(Network).
