@@ -318,7 +318,8 @@ qos(_Ch, _Conf) -> ok.
 %% @private
 -spec open_channel(atom()) -> {ok, channel()} | {error, Reason}
     when Reason :: term().
-open_channel(Name) -> turtle_conn:open_channel(Name).
+open_channel(Name) ->
+    turtle_conn:open_channel(Name).
 
 %% @doc declare(Ch, Decls) declares a list of idempotent setup for the Channel/RabbitMQ
 %% The RabbitMQ declaration stack is nasty because it returns different results for different

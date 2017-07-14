@@ -30,8 +30,15 @@ start_link() ->
 
 %% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
 init([]) ->
+    Janitor = #{ id => turtle_janitor,
+                 start => {turtle_janitor, start_link, []},
+                 restart => permanent,
+                 shutdown => 5000,
+                 type => worker,
+                 modules => [turtle_janitor]
+               },
     Connectors = configure_connectors(),
-    {ok, { {one_for_one, 5, 3600}, Connectors} }.
+    {ok, { {one_for_one, 5, 3600}, [Janitor | Connectors]} }.
 
 %%====================================================================
 %% Internal functions
