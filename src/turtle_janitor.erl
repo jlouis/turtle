@@ -117,7 +117,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
 cleanup({channel, Pid, Ch}, Reason) ->
     catch amqp_channel:close(Ch),
     Pid ! {channel_closed, Ch, Reason},

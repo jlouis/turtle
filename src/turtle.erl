@@ -321,6 +321,7 @@ qos(_Ch, _Conf) -> ok.
 open_channel(Name) ->
     turtle_janitor:open_channel(Name).
 
+%% @private
 open_connection(Network) ->
     turtle_janitor:open_connection(Network).
 
