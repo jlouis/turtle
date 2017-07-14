@@ -11,13 +11,14 @@
 
 %% API
 -export([start_link/0]).
--export([open_channel/1]).
+-export([open_channel/1, open_connection/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -define(SERVER, ?MODULE).
+-define(TIMEOUT, 60*1000).
 
 -record(state, { bimap = #{} }).
 
@@ -28,8 +29,14 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+call(Msg) ->
+    gen_server:call(?SERVER, Msg, ?TIMEOUT).
+
 open_channel(Name) ->
-    gen_server:call(?SERVER, {open_channel, Name}).
+    call({open_channel, Name}).
+
+open_connection(Network) ->
+    call({open_connection, Network}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -39,7 +46,17 @@ init([]) ->
     process_flag(trap_exit, true),
     {ok, #state{}}.
 
-
+handle_call({open_connection, Network}, {Pid, _}, #state { bimap = BiMap } = State) ->
+    %% For some reason, this is called 'start' and not 'open' like everything else...
+    case amqp_connection:start(Network) of
+        {ok, Conn} ->
+            MRef = erlang:monitor(process, Pid),
+            {reply,
+             {ok, Conn},
+             State#state { bimap = bimap_put({connection, Pid, Conn}, MRef, BiMap) }};
+        Err ->
+            {reply, Err, State}
+    end;
 handle_call({open_channel, Name}, {Pid, _}, #state { bimap = BiMap } = State) ->
     case turtle_conn:open_channel(Name) of
         {ok, Channel} ->
@@ -47,7 +64,7 @@ handle_call({open_channel, Name}, {Pid, _}, #state { bimap = BiMap } = State) ->
             MRef = erlang:monitor(process, Pid),
             {reply,
              {ok, Channel},
-             State#state { bimap = bimap_put({channel, Channel}, MRef, BiMap) }};
+             State#state { bimap = bimap_put({channel, Pid, Channel}, MRef, BiMap) }};
         Err ->
             {reply, Err, State}
     end;
@@ -58,10 +75,10 @@ handle_call(_Request, _From, State) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'DOWN', MRef, process, _Pid, _},
+handle_info({'DOWN', MRef, process, _Pid, Reason},
             #state { bimap = BiMap } = State) ->
     {Val, Cleaned} = bimap_take(MRef, BiMap),
-    ok = cleanup(Val),
+    ok = cleanup(Val, Reason),
     {noreply, State#state { bimap = Cleaned }};
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -76,21 +93,23 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-cleanup({channel, Ch}) ->
+cleanup({channel, _Pid, Ch}, _Reason) ->
     catch amqp_channel:close(Ch),
     ok;
-cleanup({connection, Conn}) ->
+cleanup({connection, Pid, Conn}, Reason) ->
     catch amqp_connection:close(Conn),
+    Pid ! {connection_closed, Conn, Reason},
     ok;
-cleanup(not_found) ->
+cleanup(not_found, _Reason) ->
+    %% Spurious exit reason
     ok.
 
 bimap_take(X, Map) ->
     case maps:take(X, Map) of
         error ->
             {not_found, Map};
-        Val ->
-            {Val, maps:remove(Val, Map)}
+        {Val, Map2} ->
+            {Val, maps:remove(Val, Map2)}
     end.
 
 bimap_put(X, Y, Map) ->

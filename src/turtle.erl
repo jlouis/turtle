@@ -34,7 +34,7 @@
 %% Low level API
 -export([
 	declare/2, declare/3,
-	open_channel/1,
+	open_channel/1, open_connection/1,
 	consume/2, cancel/2,
 	qos/2
 ]).
@@ -320,6 +320,9 @@ qos(_Ch, _Conf) -> ok.
     when Reason :: term().
 open_channel(Name) ->
     turtle_conn:open_channel(Name).
+
+open_connection(Network) ->
+    turtle_janitor:open_connection(Network).
 
 %% @doc declare(Ch, Decls) declares a list of idempotent setup for the Channel/RabbitMQ
 %% The RabbitMQ declaration stack is nasty because it returns different results for different

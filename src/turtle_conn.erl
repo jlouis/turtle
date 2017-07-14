@@ -49,8 +49,7 @@
 	network_params :: #amqp_params_network{},
 	cg :: #conn_group{},
 	connection = undefined :: undefined | pid(),
-	retry_time = ?DEFAULT_RETRY_TIME :: pos_integer(),
-	conn_ref = undefined :: undefined | reference()
+	retry_time = ?DEFAULT_RETRY_TIME :: pos_integer()
 }).
 
 
@@ -100,10 +99,14 @@ handle_cast(Cast, State) ->
     {noreply, State}.
 
 %% @private
-handle_info({'DOWN', MRef, process, _, Reason},
-	#state { name = Name, conn_ref = MRef } = State) ->
-    lager:warning("Lost connection to AMQP for conn_name = ~p", [Name]),
-    {stop, {error, {connection_down, Reason}}, State};
+handle_info({connection_closed, _Conn, Reason}, State) ->
+    ExitReason = case Reason of
+                     normal -> normal;
+                     shutdown -> normal;
+                     {shutdown, _} -> normal;
+                     Otherwise -> {amqp_connection_died, Otherwise}
+                 end,
+    {stop, ExitReason, State};
 handle_info(connect,
 	#state { name = Name, retry_time = Retry } = State) ->
     case connect(State) of
@@ -151,10 +154,9 @@ connect(#state { network_params = NP, cg = CG } = State) ->
     	host = Host,
     	port = Port
     },
-    case amqp_connection:start(Network) of
+    case turtle:open_connection(Network) of
        {ok, Conn} ->
-           MRef = erlang:monitor(process, Conn),
-           {ok, State#state { conn_ref = MRef, connection = Conn, cg = CG2 }};
+           {ok, State#state { connection = Conn, cg = CG2 }};
        {error, Reason} -> {error, Reason, State#state { cg = CG2} }
     end.
 
