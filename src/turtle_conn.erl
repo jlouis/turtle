@@ -45,11 +45,12 @@
 }).
 
 -record(state, {
-	name :: atom(),
-	network_params :: #amqp_params_network{},
-	cg :: #conn_group{},
-	connection = undefined :: undefined | pid(),
-	retry_time = ?DEFAULT_RETRY_TIME :: pos_integer()
+          name :: atom(),
+          network_params :: #amqp_params_network{},
+          cg :: #conn_group{},
+          connection = undefined :: undefined | pid(),
+          deadline :: undefined | reference(),
+          retry_time = ?DEFAULT_RETRY_TIME :: pos_integer()
 }).
 
 
@@ -74,10 +75,12 @@ call(Loc, Msg) ->
 %% @private
 init([Name, Configuration]) ->
     self() ! connect,
+    TRef = init_deadline(Configuration),
     {ok, #state {
-         name = Name,
-         cg = group_init(Configuration),
-    	network_params = turtle_config:conn_params(Configuration)
+            name = Name,
+            cg = group_init(Configuration),
+            deadline = TRef,
+            network_params = turtle_config:conn_params(Configuration)
     }}.
 
 %% @private
@@ -107,10 +110,12 @@ handle_info({connection_closed, _Conn, Reason}, State) ->
                      Otherwise -> {amqp_connection_died, Otherwise}
                  end,
     {stop, ExitReason, State};
-handle_info(connect,
-	#state { name = Name, retry_time = Retry } = State) ->
+handle_info(connect, #state { name = Name,
+                              deadline = TRef,
+                              retry_time = Retry } = State) ->
     case connect(State) of
         {ok, ConnectedState} ->
+            cancel_deadline(TRef),
             reg(Name),
             {noreply, ConnectedState};
         {error, unknown_host, #state { cg = CG } = NextState} ->
@@ -133,6 +138,8 @@ handle_info(connect,
             erlang:send_after(Retry, self(), connect),
             {noreply, NextState}
     end;
+handle_info({timeout, TRef, deadline}, #state { deadline = TRef } = State) ->
+    {stop, deadline, State};
 handle_info(Info, State) ->
     lager:warning("Received unknown info-message in turtle_conn: ~p", [Info]),
     {noreply, State}.
@@ -195,6 +202,14 @@ group_init(#{ connections := Cs }) ->
         orig = canonicalize_connections(Cs),
         attempts = ?DEFAULT_ATTEMPT_COUNT,
         next = [] }.
+
+init_deadline(#{ deadline := Ms }) ->
+    erlang:start_timer(Ms, self(), deadline);
+init_deadline(#{}) ->
+    undefined.
+
+cancel_deadline(undefined) -> ok;
+cancel_deadline(TRef) -> erlang:cancel_timer(TRef).
 
 canonicalize_connections(Cs) ->
     C = fun
