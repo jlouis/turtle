@@ -81,8 +81,10 @@ all() -> [
 %% ------------------------------------------
 start_stop(_Config) ->
     {ok, _Apps} = application:ensure_all_started(turtle),
-    ct:sleep(200),
+    ct:sleep(400),
+    #{ connection_count := 1 } = turtle_janitor:status(),
     ok = application:stop(turtle).
+
 send_recv_confirm(_Config) ->
     CastsB = get_casts(),
     MsgsB = get_msgs(),
@@ -120,6 +122,9 @@ send_recv_confirm(_Config) ->
     gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
     ct:log("Await the start of the service"),
     gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+
+    %% One publisher, 3 workers
+    #{ channel_count := 4 } = turtle_janitor:status(),
 
     ct:log("Publish a message on the channel"),
     turtle:publish(local_publisher, X, Q, <<"text/plain">>, <<"The turtle and the hare">>),
@@ -184,6 +189,9 @@ rpc(_Config) ->
     ct:log("Await the start of the service"),
     gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
 
+    %% One publisher, 3 workers, the earlier tests should be done
+    #{ channel_count := 4 } = turtle_janitor:status(),
+
     ct:log("Run a single call"),
     {ok, _, <<"text/plain">>, <<"Hello world!">>} =
         turtle:rpc_sync(local_publisher, X, Q, <<"text/plain">>, <<"Hello world!">>),
@@ -244,6 +252,9 @@ bulk(_Config) ->
     gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
     ct:log("Await the start of the service"),
     gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+
+    %% One publisher, 1 worker, the earlier tests should be done
+    #{ channel_count := 2 } = turtle_janitor:status(),
 
     ct:log("Publish a message on the channel"),
     [turtle:publish(local_publisher, X, Q, <<"text/plain">>, <<"The turtle and the hare">>)
@@ -371,6 +382,9 @@ faulty_service(_Config) ->
     ct:log("Await the start of the service"),
     gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
 
+    %% One publisher, 1 worker, the earlier tests should be done
+    #{ channel_count := 4 } = turtle_janitor:status(),
+
     ct:log("Publish some messages on the channel:"),
     [
         turtle:publish(local_publisher, X, Q, <<"text/plain">>, <<"Fail">>)
@@ -380,6 +394,12 @@ faulty_service(_Config) ->
         || _ <- lists:seq(1, 7)],
 
     ok = faulty_receive(7),
+
+    ct:sleep(200),
+
+    %% After a while, the system should have remedied itself
+    #{ channel_count := 4 } = turtle_janitor:status(),
+
     ok.
 
 kill_service(_Config) ->
@@ -407,6 +427,9 @@ kill_service(_Config) ->
     ct:log("Await the start of the service"),
     gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
 
+    %% After a while, the system should have remedied itself
+    #{ channel_count := 3 } = turtle_janitor:status(),
+
     ct:log("Flush the queue"),
     flush(),
     ct:log("Kill the connection, check that the service goes away"),
@@ -424,6 +447,9 @@ kill_service(_Config) ->
     end,
 
     ct:log("Service restarted, now try using it!"),
+    ct:sleep(200),
+    %% After a while, the system should have remedied itself
+    #{ channel_count := 3 } = turtle_janitor:status(),
 
     ct:log("Start a new publisher process"),
     {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,

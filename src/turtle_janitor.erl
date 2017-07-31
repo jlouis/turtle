@@ -11,7 +11,8 @@
 
 %% API
 -export([start_link/0]).
--export([open_channel/1, open_connection/1]).
+-export([open_channel/1, open_connection/1,
+         status/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -37,6 +38,9 @@ open_channel(Name) ->
 
 open_connection(Network) ->
     call({open_connection, Network}).
+
+status() ->
+    call(status).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -73,6 +77,9 @@ handle_call({open_channel, Name}, {Pid, _}, #state { bimap = BiMap } = State) ->
         {error, no_amqp_connection} ->
             {reply, {error, no_amqp_connection}, State}
     end;
+handle_call(status, _From, #state { bimap = BiMap } = State) ->
+    Reply = bimap_format(BiMap),
+    {reply, Reply, State};
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -141,6 +148,29 @@ bimap_put(X, Y, Map) ->
     M1 = maps:put(X, Y, Map),
     M2 = maps:put(Y, X, M1),
     M2.
+
+bimap_format(Map) ->
+    bimap_format(maps:values(Map), [], []).
+
+bimap_format([{channel, Pid, Chan} | Xs], Conns, Chans) ->
+    bimap_format(Xs,
+                 Conns,
+                 [#{ pid => Pid,
+                     channel => Chan } | Chans]);
+bimap_format([{connection, Pid, Conn} | Xs], Conns, Chans) ->
+    bimap_format(Xs,
+                 [#{ pid => Pid,
+                     connection => Conn } | Conns],
+                 Chans);
+bimap_format([Ref|Xs], Conns, Chans) when is_reference(Ref) ->
+    bimap_format(Xs, Conns, Chans);
+bimap_format([], Connections, Channels) ->
+    #{ 
+       connection_count => length(Connections),
+       connections => Connections,
+       channel_count => length(Channels),
+       channels => Channels
+     }.
 
 %% bimap_remove(X, Map) ->
 %%     case maps:get(X, Map, '$$$') of
