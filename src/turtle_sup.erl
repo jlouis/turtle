@@ -38,7 +38,7 @@ init([]) ->
                  modules => [turtle_janitor]
                },
     Connectors = configure_connectors(),
-    {ok, { {one_for_one, 5, 3600}, [Janitor | Connectors]} }.
+    {ok, { {one_for_one, 3, 3600}, [Janitor | Connectors]} }.
 
 %%====================================================================
 %% Internal functions
