@@ -92,6 +92,15 @@ become worse.
 
 # Changes
 
+* *Version 1.9* - Important major bugfix release
+
+    - Connections now supports global deadlines. A configuration of a
+      connection can take a deadline timeout. If no connection is made
+      within the deadline, the supervisor tree of turtle crashes. Once
+      it has crashed 3 times, the Erlang node will terminate. That is,
+      if you set a timeout of `300*1000` (5 minutes) then at 15
+      minutes of no operation, the Erlang node will fail.
+
 * *Version 1.8.1* - Maintenance release
 
     - The child spec validator had a bug where `callback/5` functions
@@ -303,6 +312,7 @@ into a `turtle` section inside your `sys.config`:
                 password => "ferb",
                 virtual_host => "/tri-state-area",
 
+                deadline => 300000,
                 connections => [
                     {main, [
                       {"amqp-1.danville.com", 5672 },
@@ -317,6 +327,27 @@ This will set up two connection groups. The first group is the
 Danville group with two hosts and the second is the Doofenschmirtz
 group. Turtle will try amqp-1 and amqp-2 in a round-robin fashion for
 a while. Upon failure it will fall back to the backup group.
+
+The `deadline` parameter tells the system when to globally fail the
+connection attempts. If no connection is made within the deadline,
+then the system will crash the connection process inside turtle. The
+supervisor tree will restart it, but this happens at most 3 times
+before the node is killed. E.g., setting a deadline of 1 minute (60000
+milli-seconds) will make the turtle application fail at 3 minutes if
+no connection can be made within that time-frame.
+
+The `deadline` parameter can be omitted, in which case there is no
+deadline.
+
+*DISCUSSION:* We tend to keep our systems without a deadline and rely
+on error logging to tell us that something is wrong. But it may be
+wise to guarantee some kind of progress on the AMQP connection for a
+system which relies on AMQP connections to be present before they can
+properly operate. The thing you will be balancing is how long to wait
+for a network to settle and AMQP to be available versus detecting a
+problem with the connections of nodes. Setting a value too low is
+likely pose problems when your system has dependencies among its
+services. Setting it too high tells you there are problems too late.
 
 There is currently not auth-mechanism support, but this should be
 fairly easy to add.
