@@ -92,7 +92,37 @@ become worse.
 
 # Changes
 
-* *Version 1.9* - Important major bugfix release
+* *Version 1.9.0* - Important major bugfix release
+
+    - *SERIOUS BUG:* The RabbitMQ AMQP client has no notion of a
+      controlling process, but Turtle assumed it did. The consequence
+      is that errors in workers leads to a situation where you have
+      channels in a "limbo" state: not known to Turtle, but known to
+      the client and the AMQP server.
+      
+      Messages which have been prefetched into these channels can
+      never be acked nor rejected, because the tag is lost in a
+      mailbox of a crashing process. The system thus slowly fills up
+      prefetch slots until the system comes to a halt.
+      
+      Note periodic connection resets would fix the bug. Periodic
+      connection resets happens somewhat weekly on the Amazon AWS
+      platform which is why we didn't find this bug earlier.
+      
+      The solution taken for Turtle is to introduce a `turtle_janitor`
+      process which maintains the channels and connections that has
+      been handed out. The janitor monitors and closes connections and
+      channels upon failure.
+      
+    - *POTENTIAL INCOMPATIBIILTY:* As a result of introducing a
+      janitorial process, we can remove most of the `trap_exit` from
+      the turtle processes. They don't have to clean up themselves
+      anymore since the janitor is doing it for them. All in all, the
+      system becomes far more Erlang-idiomatic.
+      
+      The fallout, however, is that if you have relied on trap-exit in
+      the process, you can't anymore, so one has to look out for this
+      incompatible change.
 
     - Connections now supports global deadlines. A configuration of a
       connection can take a deadline timeout. If no connection is made
@@ -101,6 +131,9 @@ become worse.
       if you set a timeout of `300*1000` (5 minutes) then at 15
       minutes of no operation, the Erlang node will fail.
 
+    - Use hex.pm packages
+    - Build/Test via Travis CI
+    
 * *Version 1.8.1* - Maintenance release
 
     - The child spec validator had a bug where `callback/5` functions
