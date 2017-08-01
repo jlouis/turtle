@@ -176,7 +176,6 @@ reg(Name) ->
 group_next(#conn_group { orig = [] }) ->
     {error, no_connection_groups_defined};
 group_next(#conn_group { orig = [{_N, G} | _] = Orig, next = [] } = CG) ->
-    lager:critical("Exhausted all connection groups, starting over with the first group"),
     group_next(CG#conn_group {
         orig_group = G,
         attempts = ?DEFAULT_ATTEMPT_COUNT,
@@ -186,7 +185,10 @@ group_next(#conn_group { orig_group = G, next = [{N, []} | Cns] } = CG) ->
 group_next(#conn_group { attempts = 0, next = Next } = CG) ->
     lager:warning("AMQP: Exhausted every host in group, moving to next group"),
     case Next of
-        [_] -> group_next(CG#conn_group { next = [] });
+        [_] ->
+            lager:critical(
+              "Exhausted all connection groups, starting over with the first group"),
+            group_next(CG#conn_group { next = [] });
         [_, {N, G} | Ns] ->
             group_next(CG#conn_group {
                 orig_group = G,
