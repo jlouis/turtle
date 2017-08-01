@@ -183,10 +183,11 @@ group_next(#conn_group { orig = [{_N, G} | _] = Orig, next = [] } = CG) ->
 group_next(#conn_group { orig_group = G, next = [{N, []} | Cns] } = CG) ->
     group_next(CG#conn_group { next = [{N, G} | Cns] });
 group_next(#conn_group { attempts = 0, next = Next } = CG) ->
-    lager:warning("AMQP: Exhausted every host in group, moving to next group"),
+    lager:warning("Turtle AMQP Connect: Exhausted every host in group, moving to next group"),
     case Next of
         [_] ->
             lager:critical(
+              "Turtle AMQP Connect: "
               "Exhausted all connection groups, starting over with the first group"),
             group_next(CG#conn_group { next = [] });
         [_, {N, G} | Ns] ->
