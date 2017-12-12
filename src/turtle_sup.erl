@@ -52,6 +52,5 @@ conn_sup(#{conn_name := Name} = Ps) ->
        start => {turtle_conn, start_link, [Name, Ps]},
        restart => permanent,
        shutdown => infinity,
-       type => worker,
-       modules => [turtle_conn_sup]
+       type => worker
      }.
