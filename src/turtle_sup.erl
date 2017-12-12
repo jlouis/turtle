@@ -47,7 +47,11 @@ configure_connectors() ->
     ParamSet = turtle_config:read_params(),
     [conn_sup(Params) || Params <- ParamSet].
 
-conn_sup(#{ conn_name := Name } = Ps) ->
-    {Name,
-        {turtle_conn, start_link, [Name, Ps]},
-        permanent, infinity, supervisor, [turtle_conn_sup]}.
+conn_sup(#{conn_name := Name} = Ps) ->
+    #{ id => Name,
+       start => {turtle_conn, start_link, [Name, Ps]},
+       restart => permanent,
+       shutdown => infinity,
+       type => worker,
+       modules => [turtle_conn_sup]
+     }.
