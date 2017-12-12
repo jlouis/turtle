@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/shopgun/turtle.svg?branch=develop)](https://travis-ci.org/shopgun/turtle)
+[![Build Status](https://travis-ci.org/shopgun/turtle.svg?branch=master)](https://travis-ci.org/shopgun/turtle)
 
 # Turtle - A wrapper on the RabbitMQ Erlang Client
 
