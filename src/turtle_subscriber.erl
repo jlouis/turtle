@@ -28,7 +28,7 @@
          invoke,
          invoke_state = init,
          handle_info = undefined,
-         channel :: pid(),
+         channel :: undefined | pid(),
          monitor :: reference(),
          consumer_tag,
          mode = single
@@ -99,7 +99,7 @@ handle_info({channel_closed, Ch, Reason}, #state { channel = Ch } = State) ->
                {shutdown, _} -> normal;
                Err -> {amqp_channel_died, Err}
            end,
-    {stop, Exit, shutdown(Exit, State#state { channel = none })};
+    {stop, Exit, shutdown(Exit, State#state { channel = undefined })};
 handle_info({'DOWN', MRef, process, _Pid, _Reason}, #state { monitor = MRef } = State) ->
     {stop, channel_died, State};
 handle_info(Info, #state { handle_info = undefined } = State) ->
