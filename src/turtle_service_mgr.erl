@@ -41,9 +41,9 @@ start_link(Configuration) ->
 
 %% API
 %% ----------------------------------------------------------
-    update_configuration(ServiceName, Config)->
-        Pid = where(ServiceName),
-        gen_server:call(Pid, {config_update, ServiceName, Config}, 20*1000).
+update_configuration(ServiceName, Config)->
+    Pid = where(ServiceName),
+    gen_server:call(Pid, {config_update, ServiceName, Config}, 20*1000).
 
 
 where(ChannelName) ->
@@ -87,8 +87,7 @@ handle_cast(Cast, State) ->
     {noreply, State}.
 
 %% @private
-handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, Ref,
-    #{ name := Name, subscriber_count := K } = Conf }) ->
+handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, Ref, #{ name := Name, subscriber_count := K } = Conf }) ->
     {Pool, _} = gproc:await({n,l,{turtle,service_pool, Name}}, 5000),
     add_subscribers(Pool, Conf, K),
     MRef = monitor(process, Pid),

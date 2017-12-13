@@ -49,6 +49,7 @@
           network_params :: #amqp_params_network{},
           cg :: #conn_group{},
           connection = undefined :: undefined | pid(),
+          monitor = undefined :: undefined | reference(),
           deadline :: undefined | reference(),
           retry_time = ?DEFAULT_RETRY_TIME :: pos_integer()
 }).
@@ -140,6 +141,8 @@ handle_info(connect, #state { name = Name,
     end;
 handle_info({timeout, TRef, deadline}, #state { deadline = TRef } = State) ->
     {stop, deadline, State};
+handle_info({'DOWN', MRef, process, _Pid, _Reason}, #state { monitor = MRef } = State) ->
+    {stop, connection_died, State};
 handle_info(Info, State) ->
     lager:warning("Received unknown info-message in turtle_conn: ~p", [Info]),
     {noreply, State}.
@@ -163,7 +166,9 @@ connect(#state { network_params = NP, cg = CG } = State) ->
     },
     case turtle:open_connection(Network) of
        {ok, Conn} ->
-           {ok, State#state { connection = Conn, cg = CG2 }};
+            MRef = erlang:monitor(process, Conn),
+            {ok, State#state { monitor = MRef,
+                               connection = Conn, cg = CG2 }};
        {error, Reason} -> {error, Reason, State#state { cg = CG2} }
     end.
 

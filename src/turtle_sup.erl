@@ -51,6 +51,6 @@ conn_sup(#{conn_name := Name} = Ps) ->
     #{ id => Name,
        start => {turtle_conn, start_link, [Name, Ps]},
        restart => permanent,
-       shutdown => infinity,
+       shutdown => 5000,
        type => worker
      }.

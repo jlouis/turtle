@@ -22,16 +22,17 @@
     code_change/3
 ]).
 
--record(state, {
-	conn_name,
-	name,
-	invoke,
-	invoke_state = init,
-	handle_info = undefined,
-	channel,
-	consumer_tag,
-	mode = single
- }).
+-record(state,
+        {conn_name,
+         name,
+         invoke,
+         invoke_state = init,
+         handle_info = undefined,
+         channel :: undefined | pid(),
+         monitor :: reference(),
+         consumer_tag,
+         mode = single
+        }).
 
 %% LIFETIME MAINTENANCE
 %% ----------------------------------------------------------
@@ -50,20 +51,23 @@ init([#{
         passive := Passive,
         declarations := Decls } = Conf]) ->
     {ok, Ch} = turtle:open_channel(ConnName),
+    MRef = erlang:monitor(process, Ch),
     ok = turtle:qos(Ch, Conf),
     ok = amqp_channel:register_return_handler(Ch, self()),
     ok = turtle:declare(Ch, Decls, #{ passive => Passive }),
     {ok, Tag} = turtle:consume(Ch, Queue),
     Mode = mode(Conf),
     {ok, #state {
-        consumer_tag = Tag, 
-        invoke = Fun,
-        invoke_state = invoke_state(Conf),
-        handle_info = handle_info(Conf),
-        channel = Ch,
-        conn_name = ConnName,
-        name = Name,
-        mode = Mode }}.
+            consumer_tag = Tag, 
+            invoke = Fun,
+            invoke_state = invoke_state(Conf),
+            handle_info = handle_info(Conf),
+            channel = Ch,
+            monitor = MRef,
+            conn_name = ConnName,
+            name = Name,
+            mode = Mode
+           }}.
 
 %% @private
 handle_call(Call, From, State) ->
@@ -95,7 +99,9 @@ handle_info({channel_closed, Ch, Reason}, #state { channel = Ch } = State) ->
                {shutdown, _} -> normal;
                Err -> {amqp_channel_died, Err}
            end,
-    {stop, Exit, shutdown(Exit, State#state { channel = none })};
+    {stop, Exit, shutdown(Exit, State#state { channel = undefined })};
+handle_info({'DOWN', MRef, process, _Pid, _Reason}, #state { monitor = MRef } = State) ->
+    {stop, channel_died, State};
 handle_info(Info, #state { handle_info = undefined } = State) ->
     lager:warning("Unknown info message: ~p", [Info]),
     {noreply, State};

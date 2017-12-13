@@ -4,15 +4,13 @@ sudo: false
 services:
   - rabbitmq
 
-os: linux
-otp_release: 19.3
 
 matrix:
   include:
     - os: linux
       otp_release: 19.3
     - os: linux
-      otp_release: 20.0
+      otp_release: 20.1
 
 script: "make compile test dialyzer REBAR=./rebar3"
 
