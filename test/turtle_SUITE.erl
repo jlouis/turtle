@@ -516,7 +516,7 @@ kill_amqp_client(_Config) ->
     ConnPid ! heartbeat_timeout,
 
     ct:log("Service restarted, now try using it!"),
-    ct:sleep(200),
+    ct:sleep(1200),
     %% After a while, the system should have remedied itself
     #{ channel_count := 3 } = turtle_janitor:status(),
 
