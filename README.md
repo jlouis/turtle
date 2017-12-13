@@ -92,6 +92,15 @@ become worse.
 
 # Changes
 
+* *Version 1.9.1* - Service fix
+
+    - *BUG:* If the RabbitMQ AMQP client dies, the supervision trees
+      created in applications from turtle were not correctly detecting
+      the erroneous case. This leads to a no-service situation without
+      crashing. The fix correctly monitors the AMQP clients behavior
+      and crashes appropriate parts of the supervision trees if the
+      error occurs.
+
 * *Version 1.9.0* - Important major bugfix release
 
     - *SERIOUS BUG:* The RabbitMQ AMQP client has no notion of a
