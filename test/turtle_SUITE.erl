@@ -56,14 +56,16 @@ lifetime_group() ->
     ]}].
 
 basic_group() ->
-   [{basic, [], [
-       send_recv,
-       send_recv_confirm,
-       rpc,
-       kill_publisher,
-       kill_service,
-       faulty_service,
-       bulk
+   [{basic, [],
+     [
+      send_recv,
+      send_recv_confirm,
+      rpc,
+      kill_publisher,
+      kill_service,
+      kill_amqp_client,
+      faulty_service,
+      bulk
    ]}].
 
 groups() ->
@@ -478,6 +480,72 @@ kill_service(_Config) ->
         ct:fail(subscription_timeout)
     end.
 
+kill_amqp_client(_Config) ->
+    X = <<"send_recv_exchange">>,
+    Q = <<"send_recv_queue">>,
+
+    ct:log("Add a subscriber service, consuming on Q"),
+    Self = self(),
+    F = fun(Key, ContentType, Payload, _State) ->
+        Self ! {Key, ContentType, Payload},
+        ack
+    end,
+    {ok, _ServicePid} = turtle_service:start_link(
+        #{
+            name => local_service,
+            connection => amqp_server,
+            function => F,
+            declarations =>
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
+            subscriber_count => 3,
+            consume_queue => Q
+        }),
+    ct:log("Await the start of the service"),
+    gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+
+    %% After a while, the system should have remedied itself
+    #{ channel_count := 3,
+       connections := [#{ connection := ConnPid }] } = turtle_janitor:status(),
+
+    ct:log("Flush the queue"),
+    flush(),
+
+    ct:log("Invoke a heartbeat timeout"),
+    ConnPid ! heartbeat_timeout,
+
+    ct:log("Service restarted, now try using it!"),
+    ct:sleep(200),
+    %% After a while, the system should have remedied itself
+    #{ channel_count := 3 } = turtle_janitor:status(),
+
+    ct:log("Start a new publisher process"),
+    {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,
+               [#'exchange.declare' { exchange = X },
+                #'queue.declare' { queue = Q },
+                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }]),
+
+    ct:log("Await the start of the publisher"),
+    gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
+    ct:log("Check that the process got restarted and re-registered itself"),
+    MgrPid2 = gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+
+    ct:log("Publish a message on the channel"),
+    M = term_to_binary({msg, rand:uniform(16#FFFF)}),
+    turtle:publish(local_publisher, X, Q, <<"text/plain">>, M),
+    receive
+        {Q, <<"text/plain">>, M} ->
+            ok;
+        {Q, <<"text/plain">>, _M2} ->
+            ct:log("Received other message"),
+            ok;
+        Msg2 ->
+            ct:fail({unexpected_msg, Msg2})
+    after 400 ->
+        ct:fail(subscription_timeout)
+    end.
+    
 kill_publisher(_Config) ->
     X = <<"send_recv_exchange">>,
     Q = <<"send_recv_queue">>,
