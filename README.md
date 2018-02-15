@@ -92,6 +92,17 @@ become worse.
 
 # Changes
 
+* *Version 1.9.2* - Dependency bump
+
+    - *DEPENDENT BUG* RabbitMQ in version 3.6.x uses the "mochinum"
+      module in the system. They imported this module verbatim with no
+      renaming. As a result, if you depend on any other package which
+      eventually uses "mochinum", then that version of RabbitMQ cannot
+      be used simultaneously and this breaks the system.
+
+      The problem has been fixed in 3.7.x, where the module has been
+      properly renamed. We've updated the dependencies accordingly.
+
 * *Version 1.9.1* - Service fix
 
     - *BUG:* If the RabbitMQ AMQP client dies, the supervision trees
