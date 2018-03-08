@@ -92,6 +92,10 @@ become worse.
 
 # Changes
 
+* *Version 1.9.3* - Dependency bump
+
+    - Upgrade Turtle to the 3.7.4 version of AMQP Client.
+
 * *Version 1.9.2* - Dependency bump
 
     - *DEPENDENT BUG* RabbitMQ in version 3.6.x uses the "mochinum"
