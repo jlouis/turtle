@@ -167,8 +167,7 @@ rpc(_Config) ->
             #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
         consume_queue => Q
     }),
-    ct:log("Creating Child Specs"),
-    _ChildSpecs = turtle_service:child_spec(TConf),
+
     {ok, _ServicePid} = turtle_service:start_link(TConf),
 
     ct:log("Start a new publisher process"),
@@ -228,8 +227,7 @@ bulk(_Config) ->
         consume_queue => Q,
         mode => bulk
     }),
-    ct:log("Creating Child Specs"),
-    _ChildSpecs = turtle_service:child_spec(TConf),
+
     {ok, _ServicePid} = turtle_service:start_link(TConf),
     ct:log("Start a new publisher process"),
     {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,
