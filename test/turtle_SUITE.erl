@@ -56,8 +56,7 @@ lifetime_group() ->
     ]}].
 
 basic_group() ->
-   [{basic, [],
-     [
+   [{basic, [], [
       send_recv,
       send_recv_confirm,
       rpc,
@@ -99,11 +98,14 @@ send_recv_confirm(_Config) ->
         Self ! {Key, ContentType, Payload},
         ack
     end,
+    HI = fun(_Info, State) -> {ok, State} end,
     {ok, _ServicePid} = turtle_service:start_link(
         #{
             name => local_service,
             connection => amqp_server,
             function => F,
+            handle_info => HI,
+            init_state => #{},
             declarations =>
                [#'exchange.declare' { exchange = X },
                 #'queue.declare' { queue = Q, durable = true },
@@ -286,11 +288,14 @@ send_recv(_Config) ->
         Self ! {Key, ContentType, Payload},
         ack
     end,
+    HI = fun(_Info, State) -> {ok, State} end,
     {ok, _ServicePid} = turtle_service:start_link(
         #{
             name => local_service,
             connection => amqp_server,
             function => F,
+            handle_info => HI,
+            init_state => #{},
             declarations =>
                [#'exchange.declare' { exchange = X },
                 #'queue.declare' { queue = Q },
@@ -308,7 +313,7 @@ send_recv(_Config) ->
 
     ct:log("Await the start of the publisher"),
     turtle:await(publisher, local_publisher, 300),
-    
+
     ct:log("Test the i/0 command"),
     #{
        publishers := #{
@@ -358,12 +363,15 @@ faulty_service(_Config) ->
             Self ! {Key, ContentType, Payload},
             ack
     end,
+    HI = fun(_Info, State) -> {ok, State} end,
 
     {ok, _ServicePid} = turtle_service:start_link(
         #{
             name => local_service,
             connection => amqp_server,
             function => F,
+            handle_info => HI,
+            init_state => #{},
             declarations =>
                [#'exchange.declare' { exchange = X },
                 #'queue.declare' { queue = Q },
@@ -414,16 +422,21 @@ kill_service(_Config) ->
         Self ! {Key, ContentType, Payload},
         ack
     end,
+    HI = fun(_Info, State) -> {ok, State} end,
+
     {ok, _ServicePid} = turtle_service:start_link(
         #{
             name => local_service,
             connection => amqp_server,
             function => F,
+            handle_info => HI,
+            init_state => #{},
             declarations =>
                [#'exchange.declare' { exchange = X },
                 #'queue.declare' { queue = Q },
                 #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
             subscriber_count => 3,
+            prefetch_count => 10,
             consume_queue => Q
         }),
     ct:log("Await the start of the service"),
@@ -490,16 +503,21 @@ kill_amqp_client(_Config) ->
         Self ! {Key, ContentType, Payload},
         ack
     end,
+    HI = fun(_Info, State) -> {ok, State} end,
+
     {ok, _ServicePid} = turtle_service:start_link(
         #{
             name => local_service,
             connection => amqp_server,
             function => F,
+            handle_info => HI,
+            init_state => #{},
             declarations =>
                [#'exchange.declare' { exchange = X },
                 #'queue.declare' { queue = Q },
                 #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
             subscriber_count => 3,
+            prefetch_count => 10,
             consume_queue => Q
         }),
     ct:log("Await the start of the service"),
@@ -529,7 +547,7 @@ kill_amqp_client(_Config) ->
     ct:log("Await the start of the publisher"),
     gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
     ct:log("Check that the process got restarted and re-registered itself"),
-    MgrPid2 = gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+    _MgrPid2 = gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
 
     ct:log("Publish a message on the channel"),
     M = term_to_binary({msg, rand:uniform(16#FFFF)}),
@@ -545,7 +563,7 @@ kill_amqp_client(_Config) ->
     after 400 ->
         ct:fail(subscription_timeout)
     end.
-    
+
 kill_publisher(_Config) ->
     X = <<"send_recv_exchange">>,
     Q = <<"send_recv_queue">>,
