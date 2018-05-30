@@ -105,8 +105,12 @@ connection_ok(#{ connection := C}) ->
     connection_ok(C, ConfigList).
 
 connection_ok(Name, []) ->
-    {error, {undefined_conn, Name}};
+    undefined_conn;
 connection_ok(Name, [#{ conn_name := Name } | _]) ->
     ok;
 connection_ok(Name, [_ | ConfigList]) ->
     connection_ok(Name, ConfigList).
+
+-ifdef(TEST).
+-compile([export_all]).
+-endif.

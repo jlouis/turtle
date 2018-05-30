@@ -67,15 +67,22 @@ basic_group() ->
       bulk
    ]}].
 
+config_group() ->
+    [{config, [], [
+       validate_conn_name
+    ]}].
+
 groups() ->
     lists:append([
        lifetime_group(),
-       basic_group()
+       basic_group(),
+       config_group()
     ]).
 
 all() -> [
     {group, lifetime},
-    {group, basic}
+    {group, basic},
+    {group, config}
 ].
 
 %% TESTS
@@ -551,6 +558,19 @@ kill_publisher(_Config) ->
     end,
     process_flag(trap_exit, false),
     ok.
+
+validate_conn_name(_Config) ->
+    SuccessConfig = default_service_config(#{}),
+    ok = turtle_service:validate_config(SuccessConfig),
+
+    FailConfig = SuccessConfig#{ connection := nonexistant },
+    try
+        turtle_service:validate_config(FailConfig)
+    catch
+        error:{badmatch, undefined_conn} ->
+              ok
+    end.
+
 
 %% INTERNAL FUNCTIONS
 %% ------------------------------------------
