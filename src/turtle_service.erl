@@ -104,7 +104,7 @@ connection_ok(#{ connection := C}) ->
     ConfigList = application:get_env(turtle, connection_config, []),
     connection_ok(C, ConfigList).
 
-connection_ok(Name, []) ->
+connection_ok(_, []) ->
     undefined_conn;
 connection_ok(Name, [#{ conn_name := Name } | _]) ->
     ok;

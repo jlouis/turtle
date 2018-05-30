@@ -14,13 +14,14 @@
 
 %% API
 -export([
-	publish/6,
-	publish_sync/6,
-	rpc_call/6,
-	rpc_cancel/2,
+    publish/6,
+    publish_sync/6,
+    rpc_call/6,
+    rpc_cancel/2,
     update_configuration/4
 ]).
 
+%% gen_server Callbacks
 -export([
     init/1,
     handle_call/3,
@@ -31,21 +32,21 @@
 ]).
 
 -record(track_db, {
-	monitors = #{},
-	live = #{}
+    monitors = #{},
+    live = #{}
 }).
 
 -record(state, {
-         conn_name,
-         name,
-	channel,
-	conn_ref,
-	confirms,
-	reply_queue,
-	corr_id,
-	consumer_tag,
-	in_flight = #track_db{},
-	unacked = gb_trees:empty()
+    conn_name,
+    name,
+    channel,
+    conn_ref,
+    confirms,
+    reply_queue,
+    corr_id,
+    consumer_tag,
+    in_flight = #track_db{},
+    unacked = gb_trees:empty()
  }).
 
 -define(DEFAULT_OPTIONS,
@@ -74,6 +75,7 @@ child_spec(Name, Conn, Decls, Options) ->
 %% be executed against AMQP when setting up.
 %% @end
 start_link(Name, Connection, Declarations) ->
+    ok = validate_connection_name(Connection),
     Options = maps:merge(?DEFAULT_OPTIONS, #{ declarations => Declarations}),
     gen_server:start_link(?MODULE, [Name, Connection, Options], []).
 
@@ -88,9 +90,10 @@ start_link(Name, Connection, Declarations) ->
 %% </dl>
 %% @end
 start_link(Name, Connection, Declarations, InOptions) ->
+    ok = validate_connection_name(Connection),
     Options = maps:merge(?DEFAULT_OPTIONS, InOptions),
     gen_server:start_link(?MODULE,
-    	[Name, Connection, Options#{ declarations := Declarations }], []).
+        [Name, Connection, Options#{ declarations := Declarations }], []).
 
 %% @doc
 %% This variant of publisher dynamically updates configuration of
@@ -99,6 +102,7 @@ start_link(Name, Connection, Declarations, InOptions) ->
 %% new publisher and closes down
 %% @end
 start_link(takeover, Name, Connection, Declarations, InOptions) ->
+    ok = validate_connection_name(Connection),
     Options = maps:merge(?DEFAULT_OPTIONS, InOptions),
     gen_server:start_link(?MODULE, [{takeover, Name}, Connection,
                                     Options#{declarations := Declarations }], []).
@@ -170,7 +174,7 @@ handle_call(_Pub, _From, {initializing, _, _, _, _} = Init) ->
 handle_call(_Pub, _From, {initializing_takeover, _, _, _, _} = Init) ->
     {reply, {error, initializing_takeover}, Init};
 handle_call({Kind, {publish, Pub, Props, Payload}}, From,
-	#state {conn_name = ConnName, name = Name } = InState) ->
+    #state {conn_name = ConnName, name = Name } = InState) ->
     Res =  publish({Kind, From}, Pub, #amqp_msg { props = Props, payload = Payload }, InState),
     exometer:update([ConnName, Name, Kind], 1),
     Res;
@@ -195,7 +199,7 @@ handle_cast(Pub, {initializing_takeover, _, _, _, _} = Init) ->
     lager:warning("Publish while takeover initialization: ~p", [Pub]),
     {noreply, Init};
 handle_cast({publish, Pub, Props, Payload},
-	#state { conn_name = ConnName, name = Name } = InState) ->
+    #state { conn_name = ConnName, name = Name } = InState) ->
     case publish({cast, undefined}, Pub, #amqp_msg { props = Props, payload = Payload }, InState) of
         {noreply, State} ->
             exometer:update([ConnName, Name, casts], 1),
@@ -253,11 +257,11 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing_takeover, N, Re
         consumer_tag = Tag,
         name = N}};
 handle_info(#'basic.ack' { delivery_tag = Seq, multiple = Multiple},
-	#state { confirms = true } = InState) ->
+    #state { confirms = true } = InState) ->
     {ok, State} = confirm(ack, Seq, Multiple, InState),
     {noreply, State};
 handle_info(#'basic.nack' { delivery_tag = Seq, multiple = Multiple },
-	#state { confirms = true } = State) ->
+    #state { confirms = true } = State) ->
     {ok, State} = confirm(nack, Seq, Multiple, State),
     {noreply, State};
 handle_info({channel_closed, Ch, Reason}, #state { channel = Ch } = State) ->
@@ -322,7 +326,7 @@ handle_rpc(_, _) -> {ok, undefined, undefined}.
 %% @doc handle_deliver/3 handles delivery of responses from RPC calls
 %% @end
 handle_deliver(Tag, #amqp_msg { payload = Payload, props = Props },
-	#state { in_flight = IF, channel = Ch } = State) ->
+    #state { in_flight = IF, channel = Ch } = State) ->
     #'P_basic' { content_type = Type, correlation_id = <<CorrID:64/integer>> } = Props,
     ok = amqp_channel:cast(Ch, #'basic.ack' { delivery_tag = Tag }),
     case track_lookup(CorrID, IF) of
@@ -354,12 +358,12 @@ mk_publish(Exch, Key, ContentType, IODataPayload, Opts) ->
         routing_key = Key
     },
     Props = properties(ContentType, Opts),
-    
+
     %% Much to our dismay, the amqp_client will only accept payloads which are
     %% already flattened binaries. We claim to support general iodata() input, so
     %% we have to convert the payload into the right form, which the amqp_client
     %% understands
-    
+
     Payload = iolist_to_binary(IODataPayload),
     {publish, Pub, Props, Payload}.
 
@@ -374,13 +378,13 @@ publish({call, From}, Pub, AMQPMsg, #state{ channel = Ch,  confirms = true, unac
    T = turtle_time:monotonic_time(),
    {noreply, State#state{ unacked = gb_trees:insert(Seq, {From, T}, UA) }};
 publish({rpc_call, From}, Pub, AMQPMsg,
-	#state {
-	    channel = Ch,
-	    confirms = true,
-	    unacked = UA,
-	    in_flight = IF,
-	    corr_id = CorrID,
-	    reply_queue = ReplyQ } = State) ->
+    #state {
+        channel = Ch,
+        confirms = true,
+        unacked = UA,
+        in_flight = IF,
+        corr_id = CorrID,
+        reply_queue = ReplyQ } = State) ->
    Seq = amqp_channel:next_publish_seqno(Ch),
    #amqp_msg { props = Props } = AMQPMsg,
    WithReply = AMQPMsg#amqp_msg{ props = Props#'P_basic' {
@@ -394,7 +398,7 @@ publish({rpc_call, From}, Pub, AMQPMsg,
        unacked = gb_trees:insert(Seq, {rpc, From, T, CorrID}, UA),
        in_flight = track(From, CorrID, T, IF) }};
 publish({rpc_call, From}, Pub, AMQPMsg,
-	#state { channel = Ch,  confirms = false, in_flight = IF, corr_id = CorrID, reply_queue = ReplyQ } = State) ->
+    #state { channel = Ch,  confirms = false, in_flight = IF, corr_id = CorrID, reply_queue = ReplyQ } = State) ->
    #amqp_msg { props = Props } = AMQPMsg,
    WithReply = AMQPMsg#amqp_msg{ props = Props#'P_basic' {
        reply_to = ReplyQ,
@@ -480,3 +484,14 @@ track_cancel_monitor(MRef, #track_db { monitors = Ms, live = Ls } = DB) ->
         CorrID ->
             DB#track_db { monitors = maps:remove(MRef, Ms), live = maps:remove(CorrID, Ls) }
     end.
+
+validate_connection_name(Connection) ->
+    ConfigList = application:get_env(turtle, connection_config, []),
+    connection_ok(Connection, ConfigList).
+
+connection_ok(_, []) ->
+    undefined_conn;
+connection_ok(Name, [#{ conn_name := Name } | _]) ->
+    ok;
+connection_ok(Name, [_ | ConfigList]) ->
+    connection_ok(Name, ConfigList).
