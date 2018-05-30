@@ -74,17 +74,17 @@ init([#{ name := Name } = Conf]) ->
             {turtle_subscriber_pool, start_link, [Name]},
             permanent, infinity, supervisor, [turtle_subscriber_pool]},
     {ok, { { one_for_all, 5, 3600}, [ChanMgr, Pool]}}.
-    
+
 validate_config(#{
-	name := N,
-	connection := C,
-	function := F,
-	handle_info := HI,
-	init_state := _IS,
-	declarations := Decls,
-	subscriber_count := SC,
-	prefetch_count := PC,
-	consume_queue := Q } = Conf)
+    name := N,
+    connection := C,
+    function := F,
+    handle_info := HI,
+    init_state := _IS,
+    declarations := Decls,
+    subscriber_count := SC,
+    prefetch_count := PC,
+    consume_queue := Q } = Conf)
     when
       is_atom(N),
       is_atom(C),
@@ -94,7 +94,19 @@ validate_config(#{
       is_integer(SC), SC > 0,
       is_integer(PC), PC >= 0,
       is_binary(Q) ->
-	ok = mode_ok(Conf).
+    ok = mode_ok(Conf),
+    ok = connection_ok(Conf).
 
 mode_ok(#{ mode := Mode }) when Mode == bulk; Mode == single -> ok;
 mode_ok(#{}) -> ok.
+
+connection_ok(#{ connection := C}) ->
+    ConfigList = application:get_env(turtle, connection_config, []),
+    connection_ok(C, ConfigList).
+
+connection_ok(Name, []) ->
+    {error, {undefined_conn, Name}};
+connection_ok(Name, [#{ conn_name := Name } | _]) ->
+    ok;
+connection_ok(Name, [_ | ConfigList]) ->
+    connection_ok(Name, ConfigList).
