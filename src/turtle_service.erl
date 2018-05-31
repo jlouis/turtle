@@ -95,22 +95,7 @@ validate_config(#{
       is_integer(PC), PC >= 0,
       is_binary(Q) ->
     ok = mode_ok(Conf),
-    ok = connection_ok(Conf).
+    ok = turtle_config:validate_conn_name(C).
 
 mode_ok(#{ mode := Mode }) when Mode == bulk; Mode == single -> ok;
 mode_ok(#{}) -> ok.
-
-connection_ok(#{ connection := C}) ->
-    ConfigList = application:get_env(turtle, connection_config, []),
-    connection_ok(C, ConfigList).
-
-connection_ok(_, []) ->
-    undefined_conn;
-connection_ok(Name, [#{ conn_name := Name } | _]) ->
-    ok;
-connection_ok(Name, [_ | ConfigList]) ->
-    connection_ok(Name, ConfigList).
-
--ifdef(TEST).
--compile([export_all]).
--endif.

@@ -4,12 +4,18 @@
 -module(turtle_config).
 -include_lib("amqp_client/include/amqp_client.hrl").
 
+% Query and Format API
 -export([read_params/0, conn_params/1]).
 
+% Validation API
+-export([validate_conn_name/1]).
+
+-spec read_params() -> [map()].
 read_params() ->
     {ok, Conf} = application:get_env(turtle, connection_config),
     Conf.
 
+-spec conn_params(map()) -> term(). % @todo fix this typespec
 conn_params(Ps) ->
     #amqp_params_network {
         username = username(Ps),
@@ -30,3 +36,16 @@ conn_params(Ps) ->
 username(#{ username := U }) -> list_to_binary(U).
 password(#{ password := PW }) -> list_to_binary(PW).
 virtual_host(#{ virtual_host := VH }) -> list_to_binary(VH).
+
+
+-spec validate_conn_name(term()) -> ok | unknown_conn_name.
+validate_conn_name(Name) ->
+    ConfigList = application:get_env(turtle, connection_config, []),
+    validate_conn_name(Name, ConfigList).
+
+validate_conn_name(_, []) ->
+    unknown_conn_name;
+validate_conn_name(Name, [#{ conn_name := Name } | _]) ->
+    ok;
+validate_conn_name(Name, [_ | ConfigList]) ->
+    validate_conn_name(Name, ConfigList).

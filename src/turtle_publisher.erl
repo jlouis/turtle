@@ -75,7 +75,7 @@ child_spec(Name, Conn, Decls, Options) ->
 %% be executed against AMQP when setting up.
 %% @end
 start_link(Name, Connection, Declarations) ->
-    ok = validate_connection_name(Connection),
+    ok = turtle_config:validate_conn_name(Connection),
     Options = maps:merge(?DEFAULT_OPTIONS, #{ declarations => Declarations}),
     gen_server:start_link(?MODULE, [Name, Connection, Options], []).
 
@@ -90,7 +90,7 @@ start_link(Name, Connection, Declarations) ->
 %% </dl>
 %% @end
 start_link(Name, Connection, Declarations, InOptions) ->
-    ok = validate_connection_name(Connection),
+    ok = turtle_config:validate_conn_name(Connection),
     Options = maps:merge(?DEFAULT_OPTIONS, InOptions),
     gen_server:start_link(?MODULE,
         [Name, Connection, Options#{ declarations := Declarations }], []).
@@ -102,7 +102,7 @@ start_link(Name, Connection, Declarations, InOptions) ->
 %% new publisher and closes down
 %% @end
 start_link(takeover, Name, Connection, Declarations, InOptions) ->
-    ok = validate_connection_name(Connection),
+    ok = turtle_config:validate_conn_name(Connection),
     Options = maps:merge(?DEFAULT_OPTIONS, InOptions),
     gen_server:start_link(?MODULE, [{takeover, Name}, Connection,
                                     Options#{declarations := Declarations }], []).
@@ -484,14 +484,3 @@ track_cancel_monitor(MRef, #track_db { monitors = Ms, live = Ls } = DB) ->
         CorrID ->
             DB#track_db { monitors = maps:remove(MRef, Ms), live = maps:remove(CorrID, Ls) }
     end.
-
-validate_connection_name(Connection) ->
-    ConfigList = application:get_env(turtle, connection_config, []),
-    connection_ok(Connection, ConfigList).
-
-connection_ok(_, []) ->
-    undefined_conn;
-connection_ok(Name, [#{ conn_name := Name } | _]) ->
-    ok;
-connection_ok(Name, [_ | ConfigList]) ->
-    connection_ok(Name, ConfigList).
