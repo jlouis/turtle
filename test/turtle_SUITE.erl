@@ -69,7 +69,8 @@ basic_group() ->
 
 config_group() ->
     [{config, [], [
-       validate_conn_name
+       service_conn_name_validation,
+       publisher_conn_name_validation
     ]}].
 
 groups() ->
@@ -559,18 +560,44 @@ kill_publisher(_Config) ->
     process_flag(trap_exit, false),
     ok.
 
-validate_conn_name(_Config) ->
+service_conn_name_validation(_Config) ->
     SuccessConfig = default_service_config(#{}),
     ok = turtle_service:validate_config(SuccessConfig),
 
     FailConfig = SuccessConfig#{ connection := nonexistant },
     try
-        turtle_service:validate_config(FailConfig)
+        turtle_service:validate_config(FailConfig),
+        ct:fail(service_validate_config_passed)
     catch
         error:{badmatch, undefined_conn} ->
               ok
     end.
 
+publisher_conn_name_validation(_Config) ->
+    #{ connection := C } = default_service_config(#{}),
+    X = <<"send_recv_exchange_c">>,
+    Q = <<"send_recv_queue_c">>,
+    Decls = [#'exchange.declare' { exchange = X },
+             #'queue.declare' { queue = Q },
+             #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
+
+    {ok, _} = turtle_publisher:start_link(local_publisher, C, Decls),
+
+    try
+        {ok, _} = turtle_publisher:start_link(local_publisher_2, nonexistant, Decls),
+        ct:fail(publisher_3_validate_config_passed)
+    catch
+        error:{badmatch, undefined_conn} ->
+              ok
+    end,
+
+    try
+        {ok, _} = turtle_publisher:start_link(local_publisher_3, nonexistant, Decls, #{}),
+        ct:fail(publisher_4_validate_config_passed)
+    catch
+        error:{badmatch, undefined_conn} ->
+              ok
+    end.
 
 %% INTERNAL FUNCTIONS
 %% ------------------------------------------
