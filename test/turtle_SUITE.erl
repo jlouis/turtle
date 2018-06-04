@@ -56,8 +56,7 @@ lifetime_group() ->
     ]}].
 
 basic_group() ->
-   [{basic, [],
-     [
+   [{basic, [], [
       send_recv,
       send_recv_confirm,
       rpc,
@@ -68,15 +67,22 @@ basic_group() ->
       bulk
    ]}].
 
+config_group() ->
+    [{config, [], [
+       conn_name_validation
+    ]}].
+
 groups() ->
     lists:append([
        lifetime_group(),
-       basic_group()
+       basic_group(),
+       config_group()
     ]).
 
 all() -> [
     {group, lifetime},
-    {group, basic}
+    {group, basic},
+    {group, config}
 ].
 
 %% TESTS
@@ -100,18 +106,14 @@ send_recv_confirm(_Config) ->
         ack
     end,
     {ok, _ServicePid} = turtle_service:start_link(
-        #{
-            name => local_service,
-            connection => amqp_server,
-            function => F,
-            declarations =>
-               [#'exchange.declare' { exchange = X },
-                #'queue.declare' { queue = Q, durable = true },
-                #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
-            subscriber_count => 3,
-            prefetch_count => 10,
-            consume_queue => Q
-        }),
+                          default_service_config(#{
+                            function => F,
+                            declarations =>
+                            [#'exchange.declare' { exchange = X },
+                             #'queue.declare' { queue = Q, durable = true },
+                             #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
+                            consume_queue => Q
+                           })),
 
     ct:log("Start a new publisher process"),
     {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,
@@ -163,23 +165,16 @@ rpc(_Config) ->
     F = fun(_Key, ContentType, Payload, _State) ->
         {reply, ContentType, Payload}
     end,
-    HI = fun(_Info, State) -> {ok, State} end,
-    TConf = #{
-        name => local_service,
-        connection => amqp_server,
+
+    TConf = default_service_config(#{
         function => F,
-        handle_info => HI,
-        init_state => #{},
         declarations =>
         [#'exchange.declare' { exchange = X },
             #'queue.declare' { queue = Q },
             #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
-        subscriber_count => 3,
-        prefetch_count => 10,
         consume_queue => Q
-    },
-    ct:log("Creating Child Specs"),
-    _ChildSpecs = turtle_service:child_spec(TConf),
+    }),
+
     {ok, _ServicePid} = turtle_service:start_link(TConf),
 
     ct:log("Start a new publisher process"),
@@ -226,9 +221,7 @@ bulk(_Config) ->
 
     ct:log("Add a bulk subscriber service, consuming on Q"),
     Self = self(),
-    TConf = #{
-        name => local_service,
-        connection => amqp_server,
+    TConf = default_service_config(#{
         function => fun bulk_loop/5,
         handle_info => fun bulk_handle_info/2,
         init_state => #{ recipient => Self, timer => undefined, tags => [] },
@@ -240,9 +233,8 @@ bulk(_Config) ->
         prefetch_count => 5,
         consume_queue => Q,
         mode => bulk
-    },
-    ct:log("Creating Child Specs"),
-    _ChildSpecs = turtle_service:child_spec(TConf),
+    }),
+
     {ok, _ServicePid} = turtle_service:start_link(TConf),
     ct:log("Start a new publisher process"),
     {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,
@@ -286,19 +278,16 @@ send_recv(_Config) ->
         Self ! {Key, ContentType, Payload},
         ack
     end,
+
     {ok, _ServicePid} = turtle_service:start_link(
-        #{
-            name => local_service,
-            connection => amqp_server,
+        default_service_config(#{
             function => F,
             declarations =>
                [#'exchange.declare' { exchange = X },
                 #'queue.declare' { queue = Q },
                 #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
-            subscriber_count => 3,
-            prefetch_count => 10,
             consume_queue => Q
-        }),
+        })),
 
     ct:log("Start a new publisher process"),
     {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,
@@ -308,7 +297,7 @@ send_recv(_Config) ->
 
     ct:log("Await the start of the publisher"),
     turtle:await(publisher, local_publisher, 300),
-    
+
     ct:log("Test the i/0 command"),
     #{
        publishers := #{
@@ -360,18 +349,14 @@ faulty_service(_Config) ->
     end,
 
     {ok, _ServicePid} = turtle_service:start_link(
-        #{
-            name => local_service,
-            connection => amqp_server,
+        default_service_config(#{
             function => F,
             declarations =>
                [#'exchange.declare' { exchange = X },
                 #'queue.declare' { queue = Q },
                 #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
-            subscriber_count => 3,
-            prefetch_count => 5,
             consume_queue => Q
-        }),
+        })),
 
     ct:log("Start a new publisher process"),
     {ok, _Pid} = turtle_publisher:start_link(local_publisher, amqp_server,
@@ -414,18 +399,16 @@ kill_service(_Config) ->
         Self ! {Key, ContentType, Payload},
         ack
     end,
+
     {ok, _ServicePid} = turtle_service:start_link(
-        #{
-            name => local_service,
-            connection => amqp_server,
+        default_service_config(#{
             function => F,
             declarations =>
                [#'exchange.declare' { exchange = X },
                 #'queue.declare' { queue = Q },
                 #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
-            subscriber_count => 3,
             consume_queue => Q
-        }),
+        })),
     ct:log("Await the start of the service"),
     gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
 
@@ -490,18 +473,16 @@ kill_amqp_client(_Config) ->
         Self ! {Key, ContentType, Payload},
         ack
     end,
+
     {ok, _ServicePid} = turtle_service:start_link(
-        #{
-            name => local_service,
-            connection => amqp_server,
+        default_service_config(#{
             function => F,
             declarations =>
                [#'exchange.declare' { exchange = X },
                 #'queue.declare' { queue = Q },
                 #'queue.bind' { queue = Q, exchange = X, routing_key = Q }],
-            subscriber_count => 3,
             consume_queue => Q
-        }),
+        })),
     ct:log("Await the start of the service"),
     gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
 
@@ -529,7 +510,7 @@ kill_amqp_client(_Config) ->
     ct:log("Await the start of the publisher"),
     gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
     ct:log("Check that the process got restarted and re-registered itself"),
-    MgrPid2 = gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
+    _MgrPid2 = gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
 
     ct:log("Publish a message on the channel"),
     M = term_to_binary({msg, rand:uniform(16#FFFF)}),
@@ -545,7 +526,7 @@ kill_amqp_client(_Config) ->
     after 400 ->
         ct:fail(subscription_timeout)
     end.
-    
+
 kill_publisher(_Config) ->
     X = <<"send_recv_exchange">>,
     Q = <<"send_recv_queue">>,
@@ -577,6 +558,18 @@ kill_publisher(_Config) ->
     end,
     process_flag(trap_exit, false),
     ok.
+
+conn_name_validation(_Config) ->
+    #{ connection := Name } = default_service_config(#{}),
+    ok = turtle_config:validate_conn_name(Name),
+
+    try
+        ok = turtle_config:validate_conn_name(nonexistant),
+        ct:fail(failed_to_reject_nonexistant_connection_name)
+    catch
+        error:{badmatch, unknown_conn_name} ->
+              ok
+    end.
 
 %% INTERNAL FUNCTIONS
 %% ------------------------------------------
@@ -636,3 +629,25 @@ faulty_receive(N) ->
     after 15*1000 ->
         ct:fail(subscription_timeout)
     end.
+
+default_service_config(#{} = Override) ->
+    HandleFun = fun(_Key, _ContentType, _Payload, _State) ->
+                               ack
+                       end,
+    HandleInfo = fun(_Info, State) ->
+                                {ok, State}
+                        end,
+    InitState = #{},
+    Config = #{
+            name => local_service,
+            connection => amqp_server,
+            function => HandleFun,
+            handle_info => HandleInfo,
+            init_state => InitState,
+            declarations => [],
+            subscriber_count => 3,
+            prefetch_count => 10,
+            consume_queue => <<"placeholder">>
+        },
+
+    maps:merge(Config, Override).

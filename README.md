@@ -92,6 +92,17 @@ become worse.
 
 # Changes
 
+* *Version 1.9.4* - Introduce Connection Name Validation
+
+    - Connection names are now validated when a publisher or a service
+      is created. So turtle now fails, if a service or publisher is
+      started with a connection that is not defined in the
+      `connection_config` section of turtle's application environment.
+
+    - Upgrade to AMQP Client version 3.7.5, fixing builds on Erlang 19.
+      This build bug was caused by the ranch_proxy_protocol hex package
+      being packed using a buggy vendored version of erl_tar.
+
 * *Version 1.9.3* - Dependency bump
 
     - Upgrade Turtle to the 3.7.4 version of AMQP Client.
