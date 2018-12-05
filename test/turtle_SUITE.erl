@@ -243,7 +243,7 @@ bulk(_Config) ->
                 #'queue.bind' { queue = Q, exchange = X, routing_key = Q }]),
 
     ct:log("Await the start of the publisher"),
-    gproc:await({n,l,{turtle,publisher,local_publisher}}, 300),
+    turtle_publisher:await(local_publisher, 300),
     ct:log("Await the start of the service"),
     gproc:await({n,l,{turtle,service_channel,local_service}}, 300),
 
