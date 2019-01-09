@@ -67,8 +67,12 @@ conn(Name) ->
     call(Name, conn).
     
 call(Loc, Msg) ->
-    Pid = gproc:where({n,l,{turtle, connection, Loc}}),
-    gen_server:call(Pid, Msg, 20*1000).
+    case gproc:where({n,l,{turtle, connection, Loc}}) of
+        undefined ->
+            {error, undefined};
+        Pid when is_pid(Pid) ->
+            gen_server:call(Pid, Msg, 20*1000)
+    end.
 
 %% CALLBACKS
 %% -------------------------------------------------------------------
