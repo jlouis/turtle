@@ -62,7 +62,7 @@ handle_call({open_connection, Network}, {Pid, _}, #state { bimap = BiMap } = Sta
             {reply, Err, State}
     end;
 handle_call({open_channel, Name}, {Pid, _}, #state { bimap = BiMap } = State) ->
-    case turtle_conn:conn(Name) of
+    try turtle_conn:conn(Name) of
         Conn when is_pid(Conn) ->
             case amqp_connection:open_channel(Conn) of
                 {ok, Channel} ->
@@ -74,8 +74,11 @@ handle_call({open_channel, Name}, {Pid, _}, #state { bimap = BiMap } = State) ->
                 Err ->
                     {reply, Err, State}
             end;
-        {error, no_amqp_connection} ->
-            {reply, {error, no_amqp_connection}, State}
+        {error, _Reason} = Err ->
+            {reply, Err, State}
+    catch
+        exit:{noproc, _} ->
+            {reply, {error, noproc}, State}
     end;
 handle_call(status, _From, #state { bimap = BiMap } = State) ->
     Reply = bimap_format(BiMap),
