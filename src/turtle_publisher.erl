@@ -352,7 +352,8 @@ properties(ContentType, #{}) ->
     #'P_basic' { content_type = ContentType }.
 
 %% Create a new publish package
-mk_publish(Exch, Key, ContentType, IODataPayload, Opts) ->
+mk_publish(Exch, Key, ContentType, IODataPayload, Opts) when is_binary(Exch), is_binary(Key),
+                                                             ContentType =:= undefined orelse is_binary(ContentType) ->
     Pub = #'basic.publish' {
         exchange = Exch,
         routing_key = Key
