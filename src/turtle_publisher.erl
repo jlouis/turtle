@@ -331,7 +331,7 @@ handle_deliver(Tag, #amqp_msg { payload = Payload, props = Props },
     ok = amqp_channel:cast(Ch, #'basic.ack' { delivery_tag = Tag }),
     case track_lookup(CorrID, IF) of
         {ok, Pid, T, IF2} ->
-            T2 = turtle_time:monotonic_time(),
+            T2 = erlang:monotonic_time(),
             Pid ! {rpc_reply, {self(), CorrID}, T2 - T, Type, Payload},
             {noreply, State#state { in_flight = IF2 }};
         not_found ->
@@ -375,7 +375,7 @@ publish({cast, undefined}, Pub, AMQPMsg, #state{ channel = Ch, confirms = true }
 publish({call, From}, Pub, AMQPMsg, #state{ channel = Ch,  confirms = true, unacked = UA } = State) ->
    Seq = amqp_channel:next_publish_seqno(Ch),
    ok = amqp_channel:call(Ch, Pub, AMQPMsg),
-   T = turtle_time:monotonic_time(),
+   T = erlang:monotonic_time(),
    {noreply, State#state{ unacked = gb_trees:insert(Seq, {From, T}, UA) }};
 publish({rpc_call, From}, Pub, AMQPMsg,
     #state {
@@ -391,7 +391,7 @@ publish({rpc_call, From}, Pub, AMQPMsg,
        reply_to = ReplyQ,
        correlation_id = <<CorrID:64/integer>> }},
    ok = amqp_channel:call(Ch, Pub, WithReply),
-   T = turtle_time:monotonic_time(),
+   T = erlang:monotonic_time(),
 
    {noreply, State#state {
        corr_id = CorrID + 1,
@@ -404,7 +404,7 @@ publish({rpc_call, From}, Pub, AMQPMsg,
        reply_to = ReplyQ,
        correlation_id = <<CorrID:64/integer>> }},
    ok = amqp_channel:call(Ch, Pub, WithReply),
-   T = turtle_time:monotonic_time(),
+   T = erlang:monotonic_time(),
 
    Opaque = {self(), CorrID},
    {reply, {ok, Opaque}, State#state {
@@ -415,7 +415,7 @@ publish({F, _X}, Pub, AMQPMsg, #state{ channel = Ch, confirms = false } = State)
    {reply, ok, State}.
 
 confirm(Reply, Seq, Multiple, #state { unacked = UA } = State) ->
-    T2 = turtle_time:monotonic_time(),
+    T2 = erlang:monotonic_time(),
     {Results, UA1} = remove_delivery_tags(Seq, Multiple, UA),
     reply_to_callers(T2, Reply, Results),
     {ok, State#state { unacked = UA1 }}.
@@ -444,11 +444,11 @@ remove_delivery_tags(Seq, true, Unacked) ->
 
 reply_to_callers(_T2, _Reply, []) -> ok;
 reply_to_callers(T2, Reply, [{From, T1} | Callers]) ->
-    Window = turtle_time:convert_time_unit(T2 - T1, native, milli_seconds),
+    Window = erlang:convert_time_unit(T2 - T1, native, milli_seconds),
     gen_server:reply(From, {Reply, Window}),
     reply_to_callers(T2, Reply, Callers);
 reply_to_callers(T2, ack, [{rpc, From, T1, CorrID} | Callers]) ->
-    Window = turtle_time:convert_time_unit(T2 - T1, native, milli_seconds),
+    Window = erlang:convert_time_unit(T2 - T1, native, milli_seconds),
     Opaque = {self(), CorrID},
     gen_server:reply(From, {ok, Opaque, Window}),
     reply_to_callers(T2, ack, Callers);
