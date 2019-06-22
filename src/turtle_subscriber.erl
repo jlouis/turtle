@@ -106,7 +106,7 @@ handle_info(Info, #state { handle_info = undefined } = State) ->
     lager:warning("Unknown info message: ~p", [Info]),
     {noreply, State};
 handle_info(Info, #state { handle_info = HandleInfo, invoke_state = IState } = State) ->
-    S = turtle_time:monotonic_time(),
+    S = erlang:monotonic_time(),
     try HandleInfo(Info, IState) of
         {ok, IState2} -> {noreply, State#state { invoke_state = IState2 }};
         {Cmds, IState2} when is_list(Cmds) ->
@@ -154,14 +154,14 @@ handle_deliver_bulk({#'basic.deliver' {delivery_tag = DTag, routing_key = Key},
 	  channel = Channel,
 	  conn_name = CN,
 	  name = N } = State) ->
-    S = turtle_time:monotonic_time(),
+    S = erlang:monotonic_time(),
     Tag = {DTag, ReplyTo, CorrID},
     try handle_message(Tag, Fun, Key, Content, IState) of
         {[], S2} ->
-            E = turtle_time:monotonic_time(),
+            E = erlang:monotonic_time(),
             exometer:update([CN, N, msgs], 1),
             exometer:update([CN, N, latency],
-                turtle_time:convert_time_unit(E-S, native, milli_seconds)),
+                erlang:convert_time_unit(E-S, native, milli_seconds)),
             {noreply, State#state { invoke_state = S2 }};
         {Cmds, S2} when is_list(Cmds) ->
             handle_commands(S, Cmds, State#state { invoke_state = S2 })
@@ -180,7 +180,7 @@ handle_deliver_single({#'basic.deliver' {delivery_tag = DTag, routing_key = Key}
 	        correlation_id = CorrID,
 	        reply_to = ReplyTo }} = Content},
 	#state { invoke = Fun, invoke_state = IState,channel = Channel } = State) ->
-    S = turtle_time:monotonic_time(),
+    S = erlang:monotonic_time(),
     Tag = {DTag, ReplyTo, CorrID},
     try
         %% Transform a single message into the style of bulk messages
@@ -210,24 +210,24 @@ handle_commands(S, [C | Next],
 	#state { channel = Channel, conn_name = CN, name = N } = State) ->
     case C of
         {ack, Tag} ->
-            E = turtle_time:monotonic_time(),
+            E = erlang:monotonic_time(),
             exometer:update([CN, N, msgs], 1),
             exometer:update([CN, N, latency],
-                turtle_time:convert_time_unit(E-S, native, milli_seconds)),
+                erlang:convert_time_unit(E-S, native, milli_seconds)),
            ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = delivery_tag(Tag) }),
            handle_commands(S, Next, State);
        {bulk_ack, Tag} ->
-            E = turtle_time:monotonic_time(),
+            E = erlang:monotonic_time(),
             exometer:update([CN, N, msgs], 1),
             exometer:update([CN, N, latency],
-                turtle_time:convert_time_unit(E-S, native, milli_seconds)),
+                erlang:convert_time_unit(E-S, native, milli_seconds)),
            ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = delivery_tag(Tag), multiple = true }),
            handle_commands(S, Next, State);
        {bulk_nack, Tag} ->
-           E = turtle_time:monotonic_time(),
+           E = erlang:monotonic_time(),
             exometer:update([CN, N, msgs], 1),
             exometer:update([CN, N, latency],
-                turtle_time:convert_time_unit(E-S, native, milli_seconds)),
+                erlang:convert_time_unit(E-S, native, milli_seconds)),
            ok = amqp_channel:cast(Channel, #'basic.nack' { delivery_tag = delivery_tag(Tag), multiple = true }),
            handle_commands(S, Next, State);
        {reject, Tag} ->
@@ -241,10 +241,10 @@ handle_commands(S, [C | Next],
            	#'basic.reject' { delivery_tag = delivery_tag(Tag), requeue = false}),
            handle_commands(S, Next, State);
         {reply, Tag, CType, Msg} ->
-            E = turtle_time:monotonic_time(),
+            E = erlang:monotonic_time(),
             exometer:update([CN, N, msgs], 1),
             exometer:update([CN, N, latency],
-                turtle_time:convert_time_unit(E-S, native, milli_seconds)),
+                erlang:convert_time_unit(E-S, native, milli_seconds)),
            reply(Channel, Tag, CType, Msg),
            ok = amqp_channel:cast(Channel, #'basic.ack' { delivery_tag = delivery_tag(Tag) }),
            handle_commands(S, Next, State);
@@ -338,7 +338,7 @@ mode(#{}) -> single.
 delivery_tag({Tag, _ReplyTo, _CorrID}) -> Tag.
 
 shutdown(Reason, #state { handle_info = HandleInfo, invoke_state = IState } = State) ->
-    S = turtle_time:monotonic_time(),
+    S = erlang:monotonic_time(),
     try HandleInfo({amqp_shutdown, Reason}, IState) of
         {ok, IState2} -> {noreply, State#state { invoke_state = IState2 }};
         {Cmds, IState2} when is_list(Cmds) ->
