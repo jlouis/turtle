@@ -221,6 +221,7 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, N, Ref, CName,
     ok = handle_confirms(Channel, Options),
     {ok, ReplyQueue, Tag} = handle_rpc(Channel, Options),
     ConnMRef = monitor(process, Pid),
+    _ = monitor(process, Channel),
     reg(N),
     {noreply,
       #state {
@@ -240,6 +241,7 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing_takeover, N, Re
     ok = handle_confirms(Channel, Options),
     {ok, ReplyQueue, Tag} = handle_rpc(Channel, Options),
     ConnMRef = monitor(process, Pid),
+    _ = monitor(process, Channel),
     case where(N) of
         undefined ->
             reg(N);
@@ -274,6 +276,8 @@ handle_info({channel_closed, Ch, Reason}, #state { channel = Ch } = State) ->
     {stop, Exit, State};
 handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
     {stop, {error, {connection_down, Reason}}, State};
+handle_info({'DOWN', _, process, Pid, Reason}, #state { channel = Pid } = State) ->
+    {stop, {error, {channel_died, Reason}}, State};
 handle_info({'DOWN', MRef, process, _, _Reason}, #state { in_flight = IF } = State) ->
     %% Remove in-flight monitor if the RPC caller goes away
     {noreply, State#state { in_flight = track_cancel_monitor(MRef, IF) }};
