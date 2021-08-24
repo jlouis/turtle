@@ -21,13 +21,13 @@ conn_params(Ps) ->
         username = username(Ps),
         password = password(Ps),
         virtual_host = virtual_host(Ps),
+        ssl_options = ssl_options(Ps),
 
         channel_max = maps:get(channel_max, Ps, 0),
         frame_max = maps:get(frame_max, Ps, 0),
         heartbeat = maps:get(heartbeat, Ps, 15)
 
         %% Not setting:
-        %%  - ssl_options
         %%  - auth_mechanisms
         %%  - client_properties
     }.
@@ -36,6 +36,7 @@ conn_params(Ps) ->
 username(#{ username := U }) -> list_to_binary(U).
 password(#{ password := PW }) -> list_to_binary(PW).
 virtual_host(#{ virtual_host := VH }) -> list_to_binary(VH).
+ssl_options(#{ ssl_options := SO }) -> SO.
 
 
 -spec validate_conn_name(term()) -> ok | unknown_conn_name.
