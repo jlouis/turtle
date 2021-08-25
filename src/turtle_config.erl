@@ -17,20 +17,41 @@ read_params() ->
 
 -spec conn_params(map()) -> term(). % @todo fix this typespec
 conn_params(Ps) ->
-    #amqp_params_network {
-        username = username(Ps),
-        password = password(Ps),
-        virtual_host = virtual_host(Ps),
-        ssl_options = ssl_options(Ps),
+    Params = case maps:get(ssl_options,Ps,false) of
+        false -> 
+            #amqp_params_network {
+                username = username(Ps),
+                password = password(Ps),
+                virtual_host = virtual_host(Ps),
 
-        channel_max = maps:get(channel_max, Ps, 0),
-        frame_max = maps:get(frame_max, Ps, 0),
-        heartbeat = maps:get(heartbeat, Ps, 15)
+                channel_max = maps:get(channel_max, Ps, 0),
+                frame_max = maps:get(frame_max, Ps, 0),
+                heartbeat = maps:get(heartbeat, Ps, 15)
 
-        %% Not setting:
-        %%  - auth_mechanisms
-        %%  - client_properties
-    }.
+                %% Not setting:
+                %%  - ssl_options
+                %%  - auth_mechanisms
+                %%  - client_properties
+            };
+        _ ->
+            #amqp_params_network {
+                username = username(Ps),
+                password = password(Ps),
+                virtual_host = virtual_host(Ps),
+                ssl_options = maps:get(ssl_options,Ps,[]),
+
+                channel_max = maps:get(channel_max, Ps, 0),
+                frame_max = maps:get(frame_max, Ps, 0),
+                heartbeat = maps:get(heartbeat, Ps, 15)
+
+                %% Not setting:
+                %%  - auth_mechanisms
+                %%  - client_properties
+            }
+    end,
+    io:format("Params: ~p~n",[Params]),
+    Params.
+
 
 
 username(#{ username := U }) -> list_to_binary(U).
