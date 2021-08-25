@@ -17,7 +17,7 @@ read_params() ->
 
 -spec conn_params(map()) -> term(). % @todo fix this typespec
 conn_params(Ps) ->
-    Params = case maps:get(ssl_options,Ps,false) of
+    case maps:get(ssl_options,Ps,false) of
         false -> 
             #amqp_params_network {
                 username = username(Ps),
@@ -48,9 +48,7 @@ conn_params(Ps) ->
                 %%  - auth_mechanisms
                 %%  - client_properties
             }
-    end,
-    io:format("Params: ~p~n",[Params]),
-    Params.
+    end.
 
 
 
