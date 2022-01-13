@@ -10,7 +10,10 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %% API
--export([start_link/0]).
+-export([
+        start_link/0,
+        add_connection/1
+        ]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -23,6 +26,11 @@
 
 start_link() ->
     supervisor:start_link({local, ?SERVER}, ?MODULE, []).
+
+add_connection(Configuration) ->
+	Spec = conn_sup(Configuration),
+    add_application_config(Configuration),
+    supervisor:start_child(turtle_sup,Spec).
 
 %%====================================================================
 %% Supervisor callbacks
@@ -54,3 +62,8 @@ conn_sup(#{conn_name := Name} = Ps) ->
        shutdown => 5000,
        type => worker
      }.
+
+add_application_config(Configuration) ->
+	CurrentConfig = application:get_env(turtle, connection_config, []),
+	NewConfig = CurrentConfig ++ [Configuration],
+	application:set_env(turtle,connection_config,NewConfig).

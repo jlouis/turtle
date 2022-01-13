@@ -20,7 +20,8 @@
 %% API
 -export([
 	conn/1,
-	close/1
+	close/1,
+    new/1
 ]).
 
 -export([
@@ -73,6 +74,9 @@ call(Loc, Msg) ->
         Pid when is_pid(Pid) ->
             gen_server:call(Pid, Msg, 20*1000)
     end.
+
+new(Configuration) ->
+    turtle_sup:add_connection(Configuration).
 
 %% CALLBACKS
 %% -------------------------------------------------------------------
