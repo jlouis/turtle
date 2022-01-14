@@ -8,7 +8,7 @@
 -export([
          await/2,
          child_spec/4,
-         new/1,
+         new/2,
          start_link/3,
          start_link/4,
          where/1
@@ -122,8 +122,8 @@ await(N, Timeout) ->
 
 %% @doc new/1 creates a new publisher and adds to supervisor
 %% @end
-new(ChildSpec) ->
-    supervisor:start_child(turtle_sup,ChildSpec).
+new(Supervisor,ChildSpec) ->
+    supervisor:start_child(Supervisor,ChildSpec).
 
 %% @doc publish a message asynchronously to RabbitMQ
 %%
