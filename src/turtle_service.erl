@@ -35,7 +35,6 @@ start_link(#{ name := Name } = Conf) ->
 %% @doc Create a new service during runtime
 %% @end
 new(Supervisor,ServiceChildSpec) ->
-    validate_config(ServiceChildSpec),
     supervisor:start_child(Supervisor,ServiceChildSpec).
 
 %% @doc Generate a child specification for this supervisor
