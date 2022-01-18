@@ -8,6 +8,7 @@
 -export([
          await/2,
          child_spec/4,
+         close/2,
          new/2,
          start_link/3,
          start_link/4,
@@ -120,10 +121,16 @@ where(N) ->
 await(N, Timeout) ->
     gproc:await({n,l,{turtle,publisher,N}}, Timeout).
 
-%% @doc new/1 creates a new publisher and adds to supervisor
+%% @doc new/2 creates a new publisher and adds to supervisor
 %% @end
 new(Supervisor,ChildSpec) ->
     supervisor:start_child(Supervisor,ChildSpec).
+
+%% @doc close/2 terminates a publisher process
+%% @end
+close(Supervisor,Name) ->
+    supervisor:terminate_child(Supervisor,Name).
+
 
 %% @doc publish a message asynchronously to RabbitMQ
 %%
