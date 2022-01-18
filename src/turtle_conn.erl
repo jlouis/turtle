@@ -29,6 +29,7 @@
     handle_call/3,
     handle_cast/2,
     handle_info/2,
+    stop/1,
     terminate/2,
     code_change/3
 ]).
@@ -77,6 +78,9 @@ call(Loc, Msg) ->
 
 new(Configuration) ->
     turtle_sup:add_connection(Configuration).
+
+stop(Name) ->
+    turtle_sup:stop_connection(Name).
 
 %% CALLBACKS
 %% -------------------------------------------------------------------

@@ -8,7 +8,7 @@
 -export([
          await/2,
          child_spec/4,
-         close/2,
+         stop/2,
          new/2,
          start_link/3,
          start_link/4,
@@ -128,7 +128,7 @@ new(Supervisor,ChildSpec) ->
 
 %% @doc close/2 terminates a publisher process
 %% @end
-close(Supervisor,Name) ->
+stop(Supervisor,Name) ->
     supervisor:terminate_child(Supervisor,Name).
 
 

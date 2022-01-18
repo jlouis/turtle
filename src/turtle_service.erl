@@ -12,9 +12,9 @@
 %% API
 -export([
          child_spec/1,
-         close/2,
          new/2,
          start_link/1,
+         stop/2,
          validate_config/1
         ]).
 
@@ -41,7 +41,7 @@ new(Supervisor,ServiceChildSpec) ->
 
 %% @doc Stop a service during runtime
 %% @end
-close(Supervisor,Name) ->
+stop(Supervisor,Name) ->
     supervisor:terminate_child(Supervisor, Name).
 
 %% @doc Generate a child specification for this supervisor
