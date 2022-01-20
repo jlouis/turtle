@@ -42,7 +42,8 @@ new(Supervisor,ServiceChildSpec) ->
 %% @doc Stop a service during runtime
 %% @end
 stop(Supervisor,Name) ->
-    supervisor:terminate_child(Supervisor, Name).
+    supervisor:terminate_child(Supervisor, Name),
+    supervisor:delete_child(Supervisor, Name).
 
 %% @doc Generate a child specification for this supervisor
 %% The Configuration is a map with the following keys:

@@ -129,8 +129,8 @@ new(Supervisor,ChildSpec) ->
 %% @doc close/2 terminates a publisher process
 %% @end
 stop(Supervisor,Name) ->
-    supervisor:terminate_child(Supervisor,Name).
-
+    supervisor:terminate_child(Supervisor,Name),
+    supervisor:delete_child(Supervisor,Name).
 
 %% @doc publish a message asynchronously to RabbitMQ
 %%
