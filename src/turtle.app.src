@@ -11,7 +11,6 @@
     amqp_client,
     exometer_core,
     gproc,
-    lager,
     uuid
    ]},
   {env,[
