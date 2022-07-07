@@ -112,9 +112,9 @@ handle_info(Info, #state { handle_info = HandleInfo, invoke_state = IState } = S
         {Cmds, IState2} when is_list(Cmds) ->
             handle_commands(S, Cmds, State#state { invoke_state = IState2 })
     catch
-        Class:Error ->
+          Class:Reason:Stacktrace ->
             %lager:error("Handle info crashed: {~p, ~p}, stack: ~p",
-                [Class, Error, erlang:get_stacktrace()]),
+                [Class, Error, Stacktrace]),
             {stop, {Class, Error}, State}
     end.
 
@@ -166,9 +166,9 @@ handle_deliver_bulk({#'basic.deliver' {delivery_tag = DTag, routing_key = Key},
         {Cmds, S2} when is_list(Cmds) ->
             handle_commands(S, Cmds, State#state { invoke_state = S2 })
     catch
-        Class:Error ->
+          Class:Reason:Stacktrace ->
            %lager:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
-               [Class, Error, erlang:get_stacktrace(), format_amqp_msg(Content)]),
+               [Class, Error, Stacktrace, format_amqp_msg(Content)]),
            %lager:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
            ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false }),
            {stop, {Class, Error}, State}
@@ -196,9 +196,9 @@ handle_deliver_single({#'basic.deliver' {delivery_tag = DTag, routing_key = Key}
         end,
         handle_commands(S, Cmds, State#state { invoke_state = S2 })
     catch
-        Class:Error ->
+        Class:Reason:Stacktrace ->
            %lager:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
-               [Class, Error, erlang:get_stacktrace(), format_amqp_msg(Content)]),
+               [Class, Error, Stacktrace, format_amqp_msg(Content)]),
            %lager:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
            ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = DTag, requeue = false }),
            {stop, {Class, Error}, State}
@@ -349,9 +349,9 @@ shutdown(Reason, #state { handle_info = HandleInfo, invoke_state = IState } = St
                    State#state { invoke_state = IState2 },
                    Reason)}
     catch
-        Class:Error ->
+        Class:Reason:Stacktrace ->
             %lager:error("Handle info crashed: {~p, ~p}, stack: ~p",
-                [Class, Error, erlang:get_stacktrace()]),
+                [Class, Error, Stacktrace]),
             {stop, {Class, Error}, State}
     end.
 
