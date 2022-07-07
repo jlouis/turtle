@@ -114,8 +114,8 @@ handle_info(Info, #state { handle_info = HandleInfo, invoke_state = IState } = S
     catch
           Class:Reason:Stacktrace ->
             logger:error("Handle info crashed: {~p, ~p}, stack: ~p",
-                [Class, Error, Stacktrace]),
-            {stop, {Class, Error}, State}
+                [Class, Reason, Stacktrace]),
+            {stop, {Class, Reason}, State}
     end.
 
 %% @private
@@ -168,10 +168,10 @@ handle_deliver_bulk({#'basic.deliver' {delivery_tag = DTag, routing_key = Key},
     catch
           Class:Reason:Stacktrace ->
            logger:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
-               [Class, Error, Stacktrace, format_amqp_msg(Content)]),
+               [Class, Reason, Stacktrace, format_amqp_msg(Content)]),
            logger:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
            ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false }),
-           {stop, {Class, Error}, State}
+           {stop, {Class, Reason}, State}
     end.
         
 handle_deliver_single({#'basic.deliver' {delivery_tag = DTag, routing_key = Key},
@@ -198,10 +198,10 @@ handle_deliver_single({#'basic.deliver' {delivery_tag = DTag, routing_key = Key}
     catch
         Class:Reason:Stacktrace ->
            logger:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
-               [Class, Error, Stacktrace, format_amqp_msg(Content)]),
+               [Class, Reason, Stacktrace, format_amqp_msg(Content)]),
            logger:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
            ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = DTag, requeue = false }),
-           {stop, {Class, Error}, State}
+           {stop, {Class, Reason}, State}
     end.
 
 handle_commands(_S, [], State) ->
@@ -351,8 +351,8 @@ shutdown(Reason, #state { handle_info = HandleInfo, invoke_state = IState } = St
     catch
         Class:Reason:Stacktrace ->
             logger:error("Handle info crashed: {~p, ~p}, stack: ~p",
-                [Class, Error, Stacktrace]),
-            {stop, {Class, Error}, State}
+                [Class, Reason, Stacktrace]),
+            {stop, {Class, Reason}, State}
     end.
 
 shutdown_process_commands(_S, [], State, _Reason) ->
