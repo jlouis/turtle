@@ -196,12 +196,12 @@ handle_deliver_single({#'basic.deliver' {delivery_tag = DTag, routing_key = Key}
         end,
         handle_commands(S, Cmds, State#state { invoke_state = S2 })
     catch
-        Class:Reason:Stacktrace ->
+        Class:Error:Stacktrace ->
            logger:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
-               [Class, Reason, Stacktrace, format_amqp_msg(Content)]),
+               [Class, Error, Stacktrace, format_amqp_msg(Content)]),
            logger:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
            ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = DTag, requeue = false }),
-           {stop, {Class, Reason}, State}
+           {stop, {Class, Error}, State}
     end.
 
 handle_commands(_S, [], State) ->
