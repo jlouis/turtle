@@ -200,17 +200,17 @@ handle_call({transfer_ownership, Pid}, _From, #state{name = Name} = State) ->
     gproc:goodbye(),
     {stop, normal, ok, State};
 handle_call(Call, From, State) ->
-    %lager:warning("Unknown call from ~p: ~p", [From, Call]),
+    logger:warning("Unknown call from ~p: ~p", [From, Call]),
     {reply, {error, unknown_call}, State}.
 
 %% @private
 handle_cast(Pub, {initializing, _, _, _, _} = Init) ->
     %% Messages cast to an initializing publisher are thrown away, but it shouldn't
     %% happen, so we log them
-    %lager:warning("Publish while initializing: ~p", [Pub]),
+    logger:warning("Publish while initializing: ~p", [Pub]),
     {noreply, Init};
 handle_cast(Pub, {initializing_takeover, _, _, _, _} = Init) ->
-    %lager:warning("Publish while takeover initialization: ~p", [Pub]),
+    logger:warning("Publish while takeover initialization: ~p", [Pub]),
     {noreply, Init};
 handle_cast({publish, Pub, Props, Payload},
     #state { conn_name = ConnName, name = Name } = InState) ->
@@ -223,7 +223,7 @@ handle_cast({publish, Pub, Props, Payload},
             {noreply, State}
     end;
 handle_cast(Cast, State) ->
-    %lager:warning("Unknown cast: ~p", [Cast]),
+    logger:warning("Unknown cast: ~p", [Cast]),
     {noreply, State}.
 
 %% @private
@@ -296,10 +296,10 @@ handle_info({#'basic.deliver' { delivery_tag = Tag}, Content}, State) ->
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 handle_info(#'basic.cancel_ok'{}, State) ->
-    %lager:info("Consumption canceled"),
+    logger:info("Consumption canceled"),
     {stop, normal, State};
 handle_info(Info, State) ->
-    %lager:warning("Received unknown info msg: ~p", [Info]),
+    logger:warning("Received unknown info msg: ~p", [Info]),
     {noreply, State}.
 
 %% @private

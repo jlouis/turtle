@@ -106,12 +106,12 @@ handle_call(conn, _From, #state { connection = undefined } = State) ->
 handle_call(conn, _From, #state { connection = Conn } = State) ->
     {reply, Conn, State};
 handle_call(Call, From, State) ->
-    %lager:warning("Unknown call from ~p: ~p", [From, Call]),
+    logger:warning("Unknown call from ~p: ~p", [From, Call]),
     {reply, {error, unknown_call}, State}.
 
 %% @private
 handle_cast(Cast, State) ->
-    %lager:warning("Unknown cast: ~p", [Cast]),
+    logger:warning("Unknown cast: ~p", [Cast]),
     {noreply, State}.
 
 %% @private
@@ -132,21 +132,21 @@ handle_info(connect, #state { name = Name,
             reg(Name),
             {noreply, ConnectedState};
         {error, unknown_host, #state { cg = CG } = NextState} ->
-            %lager:error("Unknown host while connecting to RabbitMQ: ~p",
+            logger:error("Unknown host while connecting to RabbitMQ: ~p",
                 [group_report(CG)]),
             {stop, {error, unknown_host}, NextState};
         {error,econnrefused, #state { cg = CG } = NextState} ->
-            %lager:info("AMQP Connection refused, retrying in ~Bs: ~p",
+            logger:info("AMQP Connection refused, retrying in ~Bs: ~p",
                 [Retry div 1000, group_report(CG)]),
             erlang:send_after(Retry, self(), connect),
             {noreply, NextState};
         {error, timeout, #state { cg = CG } = NextState} ->
-            %lager:warning("Timeout while connecting to RabbitMQ, retrying in ~Bs: ~p",
+            logger:warning("Timeout while connecting to RabbitMQ, retrying in ~Bs: ~p",
                 [Retry div 1000, group_report(CG)]),
             erlang:send_after(Retry, self(), connect),
             {noreply, NextState};
         {error, Reason, #state { cg = CG } = NextState} ->
-            %lager:warning("Error connecting to RabbitMQ, reason: ~p, retrying in ~Bs: ~p",
+            logger:warning("Error connecting to RabbitMQ, reason: ~p, retrying in ~Bs: ~p",
                 [Reason, Retry div 1000, group_report(CG)]),
             erlang:send_after(Retry, self(), connect),
             {noreply, NextState}
@@ -156,7 +156,7 @@ handle_info({timeout, TRef, deadline}, #state { deadline = TRef } = State) ->
 handle_info({'DOWN', MRef, process, _Pid, _Reason}, #state { monitor = MRef } = State) ->
     {stop, connection_died, State};
 handle_info(Info, State) ->
-    %lager:warning("Received unknown info-message in turtle_conn: ~p", [Info]),
+    logger:warning("Received unknown info-message in turtle_conn: ~p", [Info]),
     {noreply, State}.
 
 %% @private
@@ -200,10 +200,10 @@ group_next(#conn_group { orig = [{_N, G} | _] = Orig, next = [] } = CG) ->
 group_next(#conn_group { orig_group = G, next = [{N, []} | Cns] } = CG) ->
     group_next(CG#conn_group { next = [{N, G} | Cns] });
 group_next(#conn_group { attempts = 0, next = Next } = CG) ->
-    %lager:warning("Turtle AMQP Connect: Exhausted every host in group, moving to next group"),
+    logger:warning("Turtle AMQP Connect: Exhausted every host in group, moving to next group"),
     case Next of
         [_] ->
-            %lager:critical(
+            logger:critical(
               "Turtle AMQP Connect: "
               "Exhausted all connection groups, starting over with the first group"),
             group_next(CG#conn_group { next = [] });

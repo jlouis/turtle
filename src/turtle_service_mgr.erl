@@ -78,12 +78,12 @@ handle_call({config_update, PoolName, Config}, _From, #state{} = State) ->
     add_subscribers(Pool, Config, K),
     {reply, ok, State#state{conf = Config}};
 handle_call(Call, From, State) ->
-    %lager:warning("Unknown call from ~p: ~p", [From, Call]),
+    logger:warning("Unknown call from ~p: ~p", [From, Call]),
     {reply, {error, unknown_call}, State}.
 
 %% @private
 handle_cast(Cast, State) ->
-    %lager:warning("Unknown cast: ~p", [Cast]),
+    logger:warning("Unknown cast: ~p", [Cast]),
     {noreply, State}.
 
 %% @private
@@ -100,7 +100,7 @@ handle_info({gproc, Ref, registered, {_, Pid, _}}, {initializing, Ref, #{ name :
 handle_info({'DOWN', MRef, process, _, Reason}, #state { conn_ref = MRef } = State) ->
     {stop, {error, {connection_down, Reason}}, State};
 handle_info(Info, State) ->
-    %lager:warning("Unknown info msg: ~p", [Info]),
+    logger:warning("Unknown info msg: ~p", [Info]),
     {noreply, State}.
 
 %% @private

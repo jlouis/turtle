@@ -71,26 +71,26 @@ init([#{
 
 %% @private
 handle_call(Call, From, State) ->
-    %lager:warning("Unknown call from ~p: ~p", [From, Call]),
+    logger:warning("Unknown call from ~p: ~p", [From, Call]),
     {reply, {error, unknown_call}, State}.
 
 %% @private
 handle_cast(Cast, State) ->
-    %lager:warning("Unknown cast: ~p", [Cast]),
+    logger:warning("Unknown cast: ~p", [Cast]),
     {noreply, State}.
 
 %% @private
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 handle_info(#'basic.cancel_ok'{}, State) ->
-    %lager:info("Consumption canceled"),
+    logger:info("Consumption canceled"),
     {stop, normal, shutdown(rabbitmq_gone, State)};
 handle_info({#'basic.deliver'{}, _Content} = Msg, #state { mode = single } = State) ->
     handle_deliver_single(Msg, State);
 handle_info({#'basic.deliver'{}, _Content} = Msg, #state { mode = bulk } = State) ->
     handle_deliver_bulk(Msg, State);
 handle_info(#'basic.return' {} = Return, #state { name = Name } = State) ->
-    %lager:info("Channel ~p received a return from AMQP: ~p", [Name, Return]),
+    logger:info("Channel ~p received a return from AMQP: ~p", [Name, Return]),
     {noreply, State};
 handle_info({channel_closed, Ch, Reason}, #state { channel = Ch } = State) ->
     Exit = case Reason of
@@ -103,7 +103,7 @@ handle_info({channel_closed, Ch, Reason}, #state { channel = Ch } = State) ->
 handle_info({'DOWN', MRef, process, _Pid, _Reason}, #state { monitor = MRef } = State) ->
     {stop, channel_died, State};
 handle_info(Info, #state { handle_info = undefined } = State) ->
-    %lager:warning("Unknown info message: ~p", [Info]),
+    logger:warning("Unknown info message: ~p", [Info]),
     {noreply, State};
 handle_info(Info, #state { handle_info = HandleInfo, invoke_state = IState } = State) ->
     S = turtle_time:monotonic_time(),
@@ -113,7 +113,7 @@ handle_info(Info, #state { handle_info = HandleInfo, invoke_state = IState } = S
             handle_commands(S, Cmds, State#state { invoke_state = IState2 })
     catch
           Class:Reason:Stacktrace ->
-            %lager:error("Handle info crashed: {~p, ~p}, stack: ~p",
+            logger:error("Handle info crashed: {~p, ~p}, stack: ~p",
                 [Class, Error, Stacktrace]),
             {stop, {Class, Error}, State}
     end.
@@ -167,9 +167,9 @@ handle_deliver_bulk({#'basic.deliver' {delivery_tag = DTag, routing_key = Key},
             handle_commands(S, Cmds, State#state { invoke_state = S2 })
     catch
           Class:Reason:Stacktrace ->
-           %lager:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
+           logger:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
                [Class, Error, Stacktrace, format_amqp_msg(Content)]),
-           %lager:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
+           logger:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
            ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = Tag, requeue = false }),
            {stop, {Class, Error}, State}
     end.
@@ -197,9 +197,9 @@ handle_deliver_single({#'basic.deliver' {delivery_tag = DTag, routing_key = Key}
         handle_commands(S, Cmds, State#state { invoke_state = S2 })
     catch
         Class:Reason:Stacktrace ->
-           %lager:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
+           logger:error("Handler function crashed: {~p, ~p}, stack: ~p, content: ~p",
                [Class, Error, Stacktrace, format_amqp_msg(Content)]),
-           %lager:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
+           logger:error("Mailbox size ~p", [erlang:process_info(self(), message_queue_len)]),
            ok = amqp_channel:call(Channel, #'basic.reject' { delivery_tag = DTag, requeue = false }),
            {stop, {Class, Error}, State}
     end.
@@ -300,7 +300,7 @@ handle_info(#{ handle_info := Handler }) -> Handler;
 handle_info(_) -> undefined.
 
 reply(_Ch, {_Tag, undefined, _CorrID}, _CType, _Msg) ->
-    %lager:warning("Replying to target with no reply-to queue defined"),
+    logger:warning("Replying to target with no reply-to queue defined"),
     ok;
 reply(Ch, {_Tag, ReplyTo, CorrID}, CType, Msg) ->
     Publish = #'basic.publish' {
@@ -316,7 +316,7 @@ await_cancel_ok() ->
        #'basic.cancel_ok'{} ->
            ok
     after 500 ->
-           %lager:error("No basic.cancel_ok received"),
+           logger:error("No basic.cancel_ok received"),
            not_cancelled
     end.
 
@@ -350,7 +350,7 @@ shutdown(Reason, #state { handle_info = HandleInfo, invoke_state = IState } = St
                    Reason)}
     catch
         Class:Reason:Stacktrace ->
-            %lager:error("Handle info crashed: {~p, ~p}, stack: ~p",
+            logger:error("Handle info crashed: {~p, ~p}, stack: ~p",
                 [Class, Error, Stacktrace]),
             {stop, {Class, Error}, State}
     end.
@@ -358,7 +358,7 @@ shutdown(Reason, #state { handle_info = HandleInfo, invoke_state = IState } = St
 shutdown_process_commands(_S, [], State, _Reason) ->
     State;
 shutdown_process_commands(_S, Cmds, State, Reason) ->
-    %lager:warning("Ignoring ~B commands due to ungraceful shutdown: ~p",
+    logger:warning("Ignoring ~B commands due to ungraceful shutdown: ~p",
         [length(Cmds), Reason]),
     State.
 
