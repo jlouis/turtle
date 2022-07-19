@@ -34,7 +34,7 @@
     code_change/3
 ]).
 
--define(DEFAULT_RETRY_TIME, 15*1000).
+-define(DEFAULT_RETRY_TIME, 5*1000).
 -define(DEFAULT_ATTEMPT_COUNT, 10).
 
 -type network_connection() :: {string(), inet:port_number()}.
