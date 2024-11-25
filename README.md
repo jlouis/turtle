@@ -96,6 +96,17 @@ become worse.
 
   - Upgrade dependencies; exometer_core and lager
 
+* *Version 1.9.5* - SSL and Dynamic Creation
+
+    - Can now specify ssl_options in connection_config in config.system
+
+    - Can now dynamically create Connections, Services, and Publishers
+      during runtime instead of only in configuration or Supervisors:
+    
+        - turtle_conn:new(Name,Config)
+        - turtle_service:new(Supervisor,ServiceSpec)
+        - turtle_publisher:new(Supervisor,PublisherSpec)
+
 * *Version 1.9.4* - Introduce Connection Name Validation
 
     - Connection names are now validated when a publisher or a service

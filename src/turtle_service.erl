@@ -10,7 +10,13 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1, child_spec/1]).
+-export([
+         child_spec/1,
+         new/2,
+         start_link/1,
+         stop/2,
+         validate_config/1
+        ]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -27,6 +33,17 @@
 start_link(#{ name := Name } = Conf) ->
     validate_config(Conf),
     supervisor:start_link({via, gproc, {n,l,{turtle,service,Name}}}, ?MODULE, [Conf]).
+
+%% @doc Create a new service during runtime
+%% @end
+new(Supervisor,ServiceChildSpec) ->
+    supervisor:start_child(Supervisor,ServiceChildSpec).
+
+%% @doc Stop a service during runtime
+%% @end
+stop(Supervisor,Name) ->
+    supervisor:terminate_child(Supervisor, Name),
+    supervisor:delete_child(Supervisor, Name).
 
 %% @doc Generate a child specification for this supervisor
 %% The Configuration is a map with the following keys:

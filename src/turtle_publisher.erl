@@ -5,11 +5,14 @@
 -include_lib("amqp_client/include/amqp_client.hrl").
 
 %% Lifetime
--export([start_link/3,
-         start_link/4,
-         where/1,
+-export([
+         await/2,
          child_spec/4,
-         await/2
+         stop/2,
+         new/2,
+         start_link/3,
+         start_link/4,
+         where/1
 ]).
 
 %% API
@@ -118,6 +121,17 @@ where(N) ->
 await(N, Timeout) ->
     gproc:await({n,l,{turtle,publisher,N}}, Timeout).
 
+%% @doc new/2 creates a new publisher and adds to supervisor
+%% @end
+new(Supervisor,ChildSpec) ->
+    supervisor:start_child(Supervisor,ChildSpec).
+
+%% @doc close/2 terminates a publisher process
+%% @end
+stop(Supervisor,Name) ->
+    supervisor:terminate_child(Supervisor,Name),
+    supervisor:delete_child(Supervisor,Name).
+
 %% @doc publish a message asynchronously to RabbitMQ
 %%
 %% The specification is that you have to provide all parameters, because experience
@@ -186,17 +200,17 @@ handle_call({transfer_ownership, Pid}, _From, #state{name = Name} = State) ->
     gproc:goodbye(),
     {stop, normal, ok, State};
 handle_call(Call, From, State) ->
-    lager:warning("Unknown call from ~p: ~p", [From, Call]),
+    logger:warning("Unknown call from ~p: ~p", [From, Call]),
     {reply, {error, unknown_call}, State}.
 
 %% @private
 handle_cast(Pub, {initializing, _, _, _, _} = Init) ->
     %% Messages cast to an initializing publisher are thrown away, but it shouldn't
     %% happen, so we log them
-    lager:warning("Publish while initializing: ~p", [Pub]),
+    logger:warning("Publish while initializing: ~p", [Pub]),
     {noreply, Init};
 handle_cast(Pub, {initializing_takeover, _, _, _, _} = Init) ->
-    lager:warning("Publish while takeover initialization: ~p", [Pub]),
+    logger:warning("Publish while takeover initialization: ~p", [Pub]),
     {noreply, Init};
 handle_cast({publish, Pub, Props, Payload},
     #state { conn_name = ConnName, name = Name } = InState) ->
@@ -209,7 +223,7 @@ handle_cast({publish, Pub, Props, Payload},
             {noreply, State}
     end;
 handle_cast(Cast, State) ->
-    lager:warning("Unknown cast: ~p", [Cast]),
+    logger:warning("Unknown cast: ~p", [Cast]),
     {noreply, State}.
 
 %% @private
@@ -282,10 +296,10 @@ handle_info({#'basic.deliver' { delivery_tag = Tag}, Content}, State) ->
 handle_info(#'basic.consume_ok'{}, State) ->
     {noreply, State};
 handle_info(#'basic.cancel_ok'{}, State) ->
-    lager:info("Consumption canceled"),
+    logger:info("Consumption canceled"),
     {stop, normal, State};
 handle_info(Info, State) ->
-    lager:warning("Received unknown info msg: ~p", [Info]),
+    logger:warning("Received unknown info msg: ~p", [Info]),
     {noreply, State}.
 
 %% @private
